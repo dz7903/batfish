@@ -16,6 +16,7 @@ java_library(
     ],
     deps = [
         "//projects/batfish-common-protocol:common",
+        "//projects/batfish/src/main/java/org/batfish/representation/cisco",
         "//projects/batfish/src/main/java/org/batfish/vendor/a10/representation",
         "//projects/bdd",
         "@maven//:com_fasterxml_jackson_core_jackson_annotations",

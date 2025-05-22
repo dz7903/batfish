@@ -1,32 +1,45 @@
 package org.batfish.question.vendorspecific;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Multimap;
 import org.batfish.common.Answerer;
+import org.batfish.common.BatfishException;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
+import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.answers.Schema;
 import org.batfish.datamodel.questions.Question;
 import org.batfish.datamodel.table.ColumnMetadata;
 import org.batfish.datamodel.table.Row;
 import org.batfish.datamodel.table.TableAnswerElement;
 import org.batfish.datamodel.table.TableMetadata;
+import org.batfish.question.vendorspecific.ir.Interface;
+import org.batfish.question.vendorspecific.ir.RouteMap;
 import org.batfish.representation.cisco.CiscoConfiguration;
+import org.batfish.representation.cisco.IpBgpPeerGroup;
+import org.batfish.representation.juniper.BgpGroup;
+import org.batfish.representation.juniper.JuniperConfiguration;
+import org.batfish.representation.juniper.NamedBgpGroup;
+import org.batfish.representation.juniper.PolicyStatement;
+import org.batfish.representation.juniper.RoutingInstance;
+import org.batfish.representation.juniper.IpBgpGroup;
 import org.batfish.vendor.VendorConfiguration;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 public class VendorSpecificConfigurationAnswerer extends Answerer {
+    public static void warn(String message, Object... args) {
+//        System.out.println("Warning: " + String.format(message, args));
+    }
+
     static final String COL_FILE_NAME = "File_Name";
-    static final String COL_ROUTE_MAPS = "Route_Maps";
-    static final String COL_STANDARD_COMMUNITY_LISTS = "Standard_Community_Lists";
+    static final String COL_CONFIG_FORMAT = "Config_Format";
+    static final String COL_AS_NUM = "As_Num";
     static final String COL_INTERFACES = "Interfaces";
-    static final String COL_VRF = "Vrf";
-    static final String COL_IP_LISTS = "Ip_Lists";
 
     public static TableMetadata createMetadata() {
         List<ColumnMetadata> columnMetadata =
@@ -34,14 +47,11 @@ public class VendorSpecificConfigurationAnswerer extends Answerer {
                         new ColumnMetadata(
                                 COL_FILE_NAME, Schema.STRING, "The file name of this configuration", true, false),
                         new ColumnMetadata(
-                                COL_ROUTE_MAPS, Schema.OBJECT, "The definition of route maps", false, true),
+                                COL_CONFIG_FORMAT, Schema.STRING, "Format of the configuration", false, true),
                         new ColumnMetadata(
-                                COL_STANDARD_COMMUNITY_LISTS, Schema.OBJECT, "The standard community lists", false, true),
+                                COL_AS_NUM, Schema.INTEGER, "AS number", false, true),
                         new ColumnMetadata(
-                                COL_INTERFACES, Schema.OBJECT, "The list of interfaces", false, true),
-                        new ColumnMetadata(
-                                COL_VRF, Schema.OBJECT, "The default vrf", false, true),
-                        new ColumnMetadata(COL_IP_LISTS, Schema.OBJECT, "The list of ips", false, true)
+                                COL_INTERFACES, Schema.OBJECT, "The list of interfaces", false, true)
                 );
 
         return new TableMetadata(
@@ -53,45 +63,136 @@ public class VendorSpecificConfigurationAnswerer extends Answerer {
         super(question, batfish);
     }
 
+    private Row processCisco(String name, CiscoConfiguration config) {
+        Row.RowBuilder row = Row.builder();
+        row.put(COL_FILE_NAME, name);
+        row.put(COL_CONFIG_FORMAT, "cisco");
+
+        long asNum = config.getDefaultVrf().getBgpProcess().getProcnum();
+        row.put(COL_AS_NUM, asNum);
+
+        Map<String, RouteMap> routeMaps = new HashMap<>();
+        for (Map.Entry<String, org.batfish.representation.cisco.RouteMap> entry : config.getRouteMaps().entrySet()) {
+            routeMaps.put(entry.getKey(), Convert.convertCiscoRouteMap(config, entry.getValue()));
+        }
+
+        List<Interface> interfaces = new ArrayList<>();
+        for (IpBgpPeerGroup peerGroup : config.getDefaultVrf().getBgpProcess().getIpPeerGroups().values()) {
+            long remoteAs = peerGroup.getRemoteAs();
+            Ip remoteIp = peerGroup.getIp();
+
+            RouteMap importRouteMap = routeMaps.get(peerGroup.getInboundRouteMap());
+            if (importRouteMap == null) {
+                throw new BatfishException("can't find import route map " + peerGroup.getInboundRouteMap() + " in " + name);
+            }
+            RouteMap exportRouteMap = routeMaps.get(peerGroup.getOutboundRouteMap());
+            if (exportRouteMap == null) {
+                throw new BatfishException("can't find export route map " + peerGroup.getOutboundRouteMap() + " in " + name);
+            }
+
+            interfaces.add(new Interface(null, asNum, remoteIp, remoteAs, asNum == remoteAs, importRouteMap, exportRouteMap));
+        }
+        row.put(COL_INTERFACES, interfaces);
+
+        return row.build();
+    }
+
+    private Row processJuniper(String name, JuniperConfiguration config) {
+        Row.RowBuilder row = Row.builder();
+        row.put(COL_FILE_NAME, name);
+        row.put(COL_CONFIG_FORMAT, "juniper");
+
+        Long asNum = config.getMasterLogicalSystem().getDefaultRoutingInstance().getAs();
+
+        Map<String, RouteMap> routeMaps = new HashMap<>();
+        for (Map.Entry<String, PolicyStatement> entry: config.getMasterLogicalSystem().getPolicyStatements().entrySet()) {
+            routeMaps.put(entry.getKey(), Convert.convertJuniperRouteMap(config, entry.getValue()));
+        }
+
+        List<Interface> interfaces = new ArrayList<>();
+        for (RoutingInstance instance : config.getMasterLogicalSystem().getRoutingInstances().values()) {
+            System.out.println(String.format("%s routing instance %s", name, instance.getName()));
+
+            for (IpBgpGroup ig : instance.getIpBgpGroups().values()) {
+                if (asNum == null) {
+                    asNum = ig.getLocalAs();
+                } else if (ig.getLocalAs() != null && !asNum.equals(ig.getLocalAs())) {
+                    warn("multiple local-as %d,%d detected in %s", asNum, ig.getLocalAs(), name);
+                }
+
+                Ip localIp = ig.getLocalAddress();
+                if (localIp != null) System.out.println(String.format("%s local address %s", name, localIp.toString()));
+                if (ig.getRemoteAddress().getPrefixLength() != Prefix.MAX_PREFIX_LENGTH) {
+                    warn("prefix for remote address not supported");
+                }
+                Ip remoteIp = ig.getRemoteAddress().getStartIp();
+
+                Long localAs = ig.getLocalAs();
+                Long remoteAs = ig.getPeerAs();
+                boolean isInternal = ig.getType() == BgpGroup.BgpGroupType.INTERNAL;
+
+                RouteMap importRouteMap = new RouteMap();
+                for (String importPolicy : ig.getImportPolicies()) {
+                    RouteMap routeMap = routeMaps.get(importPolicy);
+                    if (routeMap == null) {
+                        throw new BatfishException("can't find route map " + importPolicy + " in " + name);
+                    }
+                    importRouteMap.merge(routeMap);
+                }
+
+                RouteMap exportRouteMap = new RouteMap();
+                for (String exportPolicy : ig.getExportPolicies()) {
+                    RouteMap routeMap = routeMaps.get(exportPolicy);
+                    if (routeMap == null) {
+                        throw new BatfishException("can't find route map " + exportPolicy + " in " + name);
+                    }
+                    exportRouteMap.merge(routeMap);
+                }
+                interfaces.add(new Interface(localIp, localAs, remoteIp, remoteAs, isInternal, importRouteMap, exportRouteMap));
+            }
+
+            if (!instance.getNamedBgpGroups().isEmpty()) {
+                warn("ignoring named bgp group in routing instance %s inside %s", instance.getName(), name);
+            }
+
+            for (NamedBgpGroup bgpGroup : instance.getNamedBgpGroups().values()) {
+                System.out.println(String.format("%s named bgp group %s", name, bgpGroup.getName()));
+                System.out.println(String.format("    local address %s", bgpGroup.getLocalAddress()));
+                System.out.println(String.format("    %s", bgpGroup.getGroupName()));
+                System.out.println(String.format("    %s", bgpGroup.getParent().getGroupName()));
+            }
+        }
+        row.put(COL_INTERFACES, interfaces);
+        if (asNum == null) {
+            warn("no local-as found in %s", name);
+        }
+        row.put(COL_AS_NUM, asNum);
+        return row.build();
+    }
+
     @Override
     public TableAnswerElement answer(NetworkSnapshot snapshot) {
         VendorSpecificConfigurationQuestion question = (VendorSpecificConfigurationQuestion) _question;
-        Set<String> includeNodes = question.getNodes().getMatchingNodes(_batfish, snapshot);
-        Multimap<String, String> hostnameFilenameMap =
-                _batfish.loadParseVendorConfigurationAnswerElement(snapshot).getFileMap();
-        Set<String> includeFiles =
-                hostnameFilenameMap.entries().stream()
-                        .filter(e -> includeNodes.contains(e.getKey()))
-                        .map(Map.Entry::getValue)
-                        .collect(Collectors.toSet());
         Pattern includeStructureNames = Pattern.compile(question.getNames(), Pattern.CASE_INSENSITIVE);
 
         TableMetadata tableMetadata = createMetadata();
-        Map<String, ColumnMetadata> columns = tableMetadata.toColumnMap();
         ImmutableList.Builder<Row> rows = ImmutableList.builder();
-
         Map<String, VendorConfiguration> configurationMap = _batfish.loadVendorConfigurations(snapshot);
         configurationMap.forEach(
             (name, config) -> {
                 if (!includeStructureNames.matcher(name).matches()) { return; }
 
-                CiscoConfiguration ciscoConfig = (CiscoConfiguration) config;
-                if (ciscoConfig == null) {
-                    System.out.println("Skipping " + name + " because it is not a cisco configuration");
-                    return;
+                if (config instanceof CiscoConfiguration) {
+                    CiscoConfiguration ciscoConfig = (CiscoConfiguration) config;
+                    rows.add(processCisco(name, ciscoConfig));
+                } else if (config instanceof JuniperConfiguration) {
+                    JuniperConfiguration juniperConfig = (JuniperConfiguration) config;
+                    rows.add(processJuniper(name, juniperConfig));
+                } else {
+                    warn("Skipping %s because it is not a cisco or juniper configuration", name);
                 }
-
-                Row.RowBuilder row = Row.builder(columns).put(COL_FILE_NAME, name);
-                row.put(COL_ROUTE_MAPS, ciscoConfig.getRouteMaps());
-                row.put(COL_STANDARD_COMMUNITY_LISTS, ciscoConfig.getStandardCommunityLists());
-                row.put(COL_INTERFACES, ciscoConfig.getInterfaces());
-                row.put(COL_VRF, ciscoConfig.getDefaultVrf());
-                row.put(COL_IP_LISTS, ciscoConfig.getPrefixLists());
-
-                rows.add(row.build());
             }
         );
-
 
         TableAnswerElement answer = new TableAnswerElement(tableMetadata);
         answer.postProcessAnswer(question, rows.build());

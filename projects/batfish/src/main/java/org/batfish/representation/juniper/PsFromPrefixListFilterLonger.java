@@ -26,6 +26,8 @@ public final class PsFromPrefixListFilterLonger extends PsFrom {
     _prefixList = prefixList;
   }
 
+  public String getPrefixList() { return _prefixList; }
+
   @VisibleForTesting
   static String name(String plName) {
     return "~" + plName + "~LONGER~";

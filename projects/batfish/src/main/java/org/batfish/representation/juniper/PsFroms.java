@@ -118,12 +118,12 @@ public final class PsFroms implements Serializable {
   }
 
   @Nonnull
-  Set<PsFromAsPath> getFromAsPaths() {
+  public Set<PsFromAsPath> getFromAsPaths() {
     return _fromAsPaths;
   }
 
   @Nonnull
-  Set<PsFromAsPathGroup> getFromAsPathGroups() {
+  public Set<PsFromAsPathGroup> getFromAsPathGroups() {
     return _fromAsPathGroups;
   }
 
@@ -133,12 +133,12 @@ public final class PsFroms implements Serializable {
   }
 
   @Nonnull
-  Set<PsFromCommunity> getFromCommunities() {
+  public Set<PsFromCommunity> getFromCommunities() {
     return _fromCommunities;
   }
 
   @Nullable
-  PsFromCommunityCount getFromCommunityCount() {
+  public PsFromCommunityCount getFromCommunityCount() {
     return _fromCommunityCount;
   }
 
@@ -148,16 +148,16 @@ public final class PsFroms implements Serializable {
   }
 
   @Nullable
-  PsFromFamily getFromFamily() {
+  public PsFromFamily getFromFamily() {
     return _fromFamily;
   }
 
-  PsFromInstance getFromInstance() {
+  public PsFromInstance getFromInstance() {
     return _fromInstance;
   }
 
   @Nonnull
-  Set<PsFromInterface> getFromInterfaces() {
+  public Set<PsFromInterface> getFromInterfaces() {
     return _fromInterfaces;
   }
 
@@ -167,42 +167,42 @@ public final class PsFroms implements Serializable {
   }
 
   @Nullable
-  PsFromMetric getFromMetric() {
+  public PsFromMetric getFromMetric() {
     return _fromMetric;
   }
 
   @Nonnull
-  Set<PsFromPolicyStatement> getFromPolicyStatements() {
+  public Set<PsFromPolicyStatement> getFromPolicyStatements() {
     return _fromPolicyStatements;
   }
 
   @Nonnull
-  Set<PsFromPolicyStatementConjunction> getFromPolicyStatementConjunctions() {
+  public Set<PsFromPolicyStatementConjunction> getFromPolicyStatementConjunctions() {
     return _fromPolicyStatementConjunctions;
   }
 
   @Nonnull
-  Set<PsFromPrefixList> getFromPrefixLists() {
+  public Set<PsFromPrefixList> getFromPrefixLists() {
     return _fromPrefixLists;
   }
 
   @Nonnull
-  Set<PsFromPrefixListFilterLonger> getFromPrefixListFilterLongers() {
+  public Set<PsFromPrefixListFilterLonger> getFromPrefixListFilterLongers() {
     return _fromPrefixListFilterLongers;
   }
 
   @Nonnull
-  Set<PsFromPrefixListFilterOrLonger> getFromPrefixListFilterOrLongers() {
+  public Set<PsFromPrefixListFilterOrLonger> getFromPrefixListFilterOrLongers() {
     return _fromPrefixListFilterOrLongers;
   }
 
   @Nonnull
-  Set<PsFromProtocol> getFromProtocols() {
+  public Set<PsFromProtocol> getFromProtocols() {
     return _fromProtocols;
   }
 
   @Nonnull
-  Set<PsFromRouteFilter> getFromRouteFilters() {
+  public Set<PsFromRouteFilter> getFromRouteFilters() {
     return _fromRouteFilters;
   }
 

@@ -35,7 +35,12 @@ import org.batfish.datamodel.acl.DeniedByAcl;
 import org.batfish.datamodel.acl.FalseExpr;
 import org.batfish.datamodel.acl.GenericAclLineMatchExprVisitor;
 import org.batfish.datamodel.acl.GenericAclLineVisitor;
+import org.batfish.datamodel.acl.MatchDestinationIp;
+import org.batfish.datamodel.acl.MatchDestinationPort;
 import org.batfish.datamodel.acl.MatchHeaderSpace;
+import org.batfish.datamodel.acl.MatchIpProtocol;
+import org.batfish.datamodel.acl.MatchSourceIp;
+import org.batfish.datamodel.acl.MatchSourcePort;
 import org.batfish.datamodel.acl.MatchSrcInterface;
 import org.batfish.datamodel.acl.NotMatchExpr;
 import org.batfish.datamodel.acl.OrMatchExpr;
@@ -220,8 +225,6 @@ public abstract class IpAccessListToBdd {
             lineBddsWithCurrentAction.add(linePermitBdd);
           }
           break;
-        default:
-          throw new IllegalStateException("Unexpected LineAction " + currentAction);
       }
     }
 
@@ -233,8 +236,6 @@ public abstract class IpAccessListToBdd {
       case DENY:
         finalizeBlock.apply(denyBdd, permitBdd);
         break;
-      default:
-        throw new IllegalStateException("Unexpected LineAction " + currentAction);
     }
 
     return new PermitAndDenyBdds(permitBdd, denyBdd);
@@ -332,8 +333,33 @@ public abstract class IpAccessListToBdd {
     }
 
     @Override
+    public BDD visitMatchDestinationIp(MatchDestinationIp matchDestinationIp) {
+      return _headerSpaceToBDD.getDstIpSpaceToBdd().visit(matchDestinationIp.getIps());
+    }
+
+    @Override
+    public BDD visitMatchDestinationPort(MatchDestinationPort matchDestinationPort) {
+      return _headerSpaceToBDD.dstPortsToBDD(matchDestinationPort.getPorts());
+    }
+
+    @Override
     public final BDD visitMatchHeaderSpace(MatchHeaderSpace matchHeaderSpace) {
       return _headerSpaceToBDD.toBDD(matchHeaderSpace.getHeaderspace());
+    }
+
+    @Override
+    public BDD visitMatchIpProtocol(MatchIpProtocol matchIpProtocol) {
+      return _headerSpaceToBDD.ipProtocolToBDD(matchIpProtocol.getProtocol());
+    }
+
+    @Override
+    public BDD visitMatchSourceIp(MatchSourceIp matchSourceIp) {
+      return _headerSpaceToBDD.getSrcIpSpaceToBdd().visit(matchSourceIp.getIps());
+    }
+
+    @Override
+    public BDD visitMatchSourcePort(MatchSourcePort matchSourcePort) {
+      return _headerSpaceToBDD.sourcePortsToBDD(matchSourcePort.getPorts());
     }
 
     @Override

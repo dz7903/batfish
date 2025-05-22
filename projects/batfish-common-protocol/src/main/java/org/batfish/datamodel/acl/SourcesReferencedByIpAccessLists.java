@@ -114,7 +114,32 @@ public final class SourcesReferencedByIpAccessLists {
     }
 
     @Override
+    public Void visitMatchDestinationIp(MatchDestinationIp matchDestinationIp) {
+      return null;
+    }
+
+    @Override
+    public Void visitMatchDestinationPort(MatchDestinationPort matchDestinationPort) {
+      return null;
+    }
+
+    @Override
     public Void visitMatchHeaderSpace(MatchHeaderSpace matchHeaderSpace) {
+      return null;
+    }
+
+    @Override
+    public Void visitMatchIpProtocol(MatchIpProtocol matchIpProtocol) {
+      return null;
+    }
+
+    @Override
+    public Void visitMatchSourceIp(MatchSourceIp matchSourceIp) {
+      return null;
+    }
+
+    @Override
+    public Void visitMatchSourcePort(MatchSourcePort matchSourcePort) {
       return null;
     }
 

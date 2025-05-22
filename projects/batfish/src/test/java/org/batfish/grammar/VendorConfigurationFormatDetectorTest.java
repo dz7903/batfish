@@ -25,6 +25,7 @@ import static org.hamcrest.Matchers.not;
 
 import com.google.common.collect.ImmutableList;
 import java.util.List;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -35,7 +36,11 @@ public class VendorConfigurationFormatDetectorTest {
   @Test
   public void testA10() {
     String fileText =
-        "!\n" + "!version 3.4.5-A6-B78, build 90 (Aug-5-2021,01:23)\n" + "hostname foo\n";
+        """
+        !
+        !version 3.4.5-A6-B78, build 90 (Aug-5-2021,01:23)
+        hostname foo
+        """;
     assertThat(identifyConfigurationFormat(fileText), equalTo(A10_ACOS));
   }
 
@@ -197,6 +202,12 @@ public class VendorConfigurationFormatDetectorTest {
         ImmutableList.of(bundleEtherInDesc, partialKw, inComment, notFirstWord)) {
       assertThat(identifyConfigurationFormat(fileText), not(equalTo(CISCO_IOS_XR)));
     }
+  }
+
+  @Test
+  public void testIpTablesFalsePositives() {
+    String fileText = StringUtils.join("set system host-name test", "set FORWARD INPUT OUTPUT");
+    assertThat(identifyConfigurationFormat(fileText), equalTo(FLAT_JUNIPER));
   }
 
   @Test

@@ -9,6 +9,7 @@ import static org.batfish.common.matchers.WarningMatchers.hasText;
 import static org.batfish.common.matchers.WarningsMatchers.hasParseWarning;
 import static org.batfish.common.matchers.WarningsMatchers.hasParseWarnings;
 import static org.batfish.common.matchers.WarningsMatchers.hasRedFlags;
+import static org.batfish.common.util.BgpRouteUtil.convertNonBgpRouteToBgpRoute;
 import static org.batfish.common.util.Resources.readResource;
 import static org.batfish.datamodel.BgpRoute.DEFAULT_LOCAL_PREFERENCE;
 import static org.batfish.datamodel.InactiveReason.ADMIN_DOWN;
@@ -318,7 +319,6 @@ import org.batfish.datamodel.routing_policy.statement.If;
 import org.batfish.datamodel.routing_policy.statement.Statements;
 import org.batfish.datamodel.tracking.DecrementPriority;
 import org.batfish.datamodel.vendor_family.cisco_nxos.NexusPlatform;
-import org.batfish.dataplane.protocols.BgpProtocolHelper;
 import org.batfish.grammar.silent_syntax.SilentSyntaxCollection;
 import org.batfish.main.Batfish;
 import org.batfish.main.BatfishTestUtils;
@@ -795,9 +795,9 @@ public final class CiscoNxosGrammarTest {
         batfish.loadConvertConfigurationAnswerElementOrReparse(batfish.getSnapshot());
 
     String neighborIp = bgpNeighborStructureName("1.2.3.4", "default");
-    String neighborIp6 = bgpNeighborStructureName("2001:db8:85a3:0:0:8a2e:370:7334", "default");
+    String neighborIp6 = bgpNeighborStructureName("2001:db8:85a3::8a2e:370:7334", "default");
     String neighborPrefix = bgpNeighborStructureName("1.2.3.0/24", "default");
-    String neighborPrefix6 = bgpNeighborStructureName("2001:db8:0:0:0:0:0:0/32", "default");
+    String neighborPrefix6 = bgpNeighborStructureName("2001:db8::/32", "default");
 
     assertThat(
         ccae,
@@ -1114,7 +1114,7 @@ public final class CiscoNxosGrammarTest {
     {
       // Redistribute matching EIGRP route into EBGP
       Bgpv4Route.Builder rb =
-          BgpProtocolHelper.convertNonBgpRouteToBgpRoute(
+          convertNonBgpRouteToBgpRoute(
               matchEigrp, bgpRouterId, nextHopIp, ebgpAdmin, RoutingProtocol.BGP, REDISTRIBUTE);
       assertTrue(
           bgpRedistPolicy.processBgpRoute(matchEigrp, rb, ebgpSessionProps, Direction.OUT, null));
@@ -1139,7 +1139,7 @@ public final class CiscoNxosGrammarTest {
     {
       // Redistribute nonmatching EIGRP route to EBGP
       Bgpv4Route.Builder rb =
-          BgpProtocolHelper.convertNonBgpRouteToBgpRoute(
+          convertNonBgpRouteToBgpRoute(
               noMatchEigrp, bgpRouterId, nextHopIp, ebgpAdmin, RoutingProtocol.BGP, REDISTRIBUTE);
       assertFalse(
           bgpRedistPolicy.processBgpRoute(noMatchEigrp, rb, ebgpSessionProps, Direction.OUT, null));
@@ -1147,7 +1147,7 @@ public final class CiscoNxosGrammarTest {
     {
       // Redistribute matching EIGRP route to IBGP
       Bgpv4Route.Builder rb =
-          BgpProtocolHelper.convertNonBgpRouteToBgpRoute(
+          convertNonBgpRouteToBgpRoute(
               matchEigrp, bgpRouterId, nextHopIp, ibgpAdmin, RoutingProtocol.IBGP, REDISTRIBUTE);
       assertTrue(
           bgpRedistPolicy.processBgpRoute(matchEigrp, rb, ibgpSessionProps, Direction.OUT, null));
@@ -1172,7 +1172,7 @@ public final class CiscoNxosGrammarTest {
     {
       // Redistribute nonmatching EIGRP route to IBGP
       Bgpv4Route.Builder rb =
-          BgpProtocolHelper.convertNonBgpRouteToBgpRoute(
+          convertNonBgpRouteToBgpRoute(
               noMatchEigrp, bgpRouterId, nextHopIp, ibgpAdmin, RoutingProtocol.IBGP, REDISTRIBUTE);
       assertFalse(
           bgpRedistPolicy.processBgpRoute(noMatchEigrp, rb, ibgpSessionProps, Direction.OUT, null));
@@ -1191,7 +1191,7 @@ public final class CiscoNxosGrammarTest {
               .setNetwork(matchRm)
               .build();
       Bgpv4Route.Builder rb =
-          BgpProtocolHelper.convertNonBgpRouteToBgpRoute(
+          convertNonBgpRouteToBgpRoute(
               matchEigrpEx, bgpRouterId, nextHopIp, ebgpAdmin, RoutingProtocol.BGP, REDISTRIBUTE);
       assertTrue(
           bgpRedistPolicy.processBgpRoute(matchEigrpEx, rb, ebgpSessionProps, Direction.OUT, null));
@@ -9640,12 +9640,9 @@ public final class CiscoNxosGrammarTest {
         warnings,
         containsInAnyOrder(
             hasComment("Removing non-existent aggregate network: 100.0.0.0/24 in vrf: default"),
-            hasComment(
-                "Removing non-existent aggregate network: beef:afad:0:0:0:0:0:0/64 in vrf:"
-                    + " default"),
+            hasComment("Removing non-existent aggregate network: beef:afad::/64 in vrf: default"),
             hasComment("Removing non-existent aggregate network: 101.0.0.0/24 in vrf: v1"),
-            hasComment(
-                "Removing non-existent aggregate network: beef:face:0:0:0:0:0:0/64 in vrf: v1")));
+            hasComment("Removing non-existent aggregate network: beef:face::/64 in vrf: v1")));
   }
 
   @Test

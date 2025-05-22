@@ -256,9 +256,40 @@ public final class AclTracer extends AclLineEvaluator {
   }
 
   @Override
+  public Boolean visitMatchDestinationIp(MatchDestinationIp matchDestinationIp) {
+    setTraceElement(matchDestinationIp.getTraceElement());
+    return traceDstIp(matchDestinationIp.getIps());
+  }
+
+  @Override
+  public Boolean visitMatchDestinationPort(MatchDestinationPort matchDestinationPort) {
+    setTraceElement(matchDestinationPort.getTraceElement());
+    return _flow.getDstPort() != null
+        && matchDestinationPort.getPorts().contains(_flow.getDstPort());
+  }
+
+  @Override
   public Boolean visitMatchHeaderSpace(MatchHeaderSpace matchHeaderSpace) {
     setTraceElement(matchHeaderSpace.getTraceElement());
     return trace(matchHeaderSpace.getHeaderspace());
+  }
+
+  @Override
+  public Boolean visitMatchIpProtocol(MatchIpProtocol matchIpProtocol) {
+    setTraceElement(matchIpProtocol.getTraceElement());
+    return _flow.getIpProtocol() == matchIpProtocol.getProtocol();
+  }
+
+  @Override
+  public Boolean visitMatchSourceIp(MatchSourceIp matchSourceIp) {
+    setTraceElement(matchSourceIp.getTraceElement());
+    return traceSrcIp(matchSourceIp.getIps());
+  }
+
+  @Override
+  public Boolean visitMatchSourcePort(MatchSourcePort matchSourcePort) {
+    setTraceElement(matchSourcePort.getTraceElement());
+    return _flow.getSrcPort() != null && matchSourcePort.getPorts().contains(_flow.getSrcPort());
   }
 
   @Override

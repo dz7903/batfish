@@ -12,7 +12,17 @@ public interface GenericAclLineMatchExprVisitor<R> {
 
   R visitFalseExpr(FalseExpr falseExpr);
 
+  R visitMatchDestinationIp(MatchDestinationIp matchDestinationIp);
+
+  R visitMatchDestinationPort(MatchDestinationPort matchDestinationPort);
+
   R visitMatchHeaderSpace(MatchHeaderSpace matchHeaderSpace);
+
+  R visitMatchIpProtocol(MatchIpProtocol matchIpProtocol);
+
+  R visitMatchSourceIp(MatchSourceIp matchSourceIp);
+
+  R visitMatchSourcePort(MatchSourcePort matchSourcePort);
 
   R visitMatchSrcInterface(MatchSrcInterface matchSrcInterface);
 

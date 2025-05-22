@@ -2,6 +2,7 @@ package org.batfish.grammar.cisco;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.batfish.common.matchers.ParseWarningMatchers.hasComment;
+import static org.batfish.common.util.BgpRouteUtil.convertNonBgpRouteToBgpRoute;
 import static org.batfish.common.util.CommonUtil.sha256Digest;
 import static org.batfish.common.util.Resources.readResource;
 import static org.batfish.datamodel.AuthenticationMethod.ENABLE;
@@ -69,7 +70,6 @@ import static org.batfish.datamodel.matchers.DataModelMatchers.hasDefinedStructu
 import static org.batfish.datamodel.matchers.DataModelMatchers.hasDefinedStructureWithDefinitionLines;
 import static org.batfish.datamodel.matchers.DataModelMatchers.hasIpProtocols;
 import static org.batfish.datamodel.matchers.DataModelMatchers.hasMemberInterfaces;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasName;
 import static org.batfish.datamodel.matchers.DataModelMatchers.hasNumReferrers;
 import static org.batfish.datamodel.matchers.DataModelMatchers.hasOutgoingFilter;
 import static org.batfish.datamodel.matchers.DataModelMatchers.hasOutgoingFilterName;
@@ -79,15 +79,12 @@ import static org.batfish.datamodel.matchers.DataModelMatchers.hasReferencedStru
 import static org.batfish.datamodel.matchers.DataModelMatchers.hasRouteFilterList;
 import static org.batfish.datamodel.matchers.DataModelMatchers.hasUndefinedReference;
 import static org.batfish.datamodel.matchers.DataModelMatchers.hasZone;
-import static org.batfish.datamodel.matchers.DataModelMatchers.isIpSpaceReferenceThat;
 import static org.batfish.datamodel.matchers.DataModelMatchers.isPermittedByAclThat;
 import static org.batfish.datamodel.matchers.DataModelMatchers.permits;
 import static org.batfish.datamodel.matchers.EigrpMetricMatchers.hasDelay;
 import static org.batfish.datamodel.matchers.EigrpRouteMatchers.hasEigrpMetric;
 import static org.batfish.datamodel.matchers.ExprAclLineMatchers.hasMatchCondition;
-import static org.batfish.datamodel.matchers.HeaderSpaceMatchers.hasDstIps;
 import static org.batfish.datamodel.matchers.HeaderSpaceMatchers.hasDstPorts;
-import static org.batfish.datamodel.matchers.HeaderSpaceMatchers.hasSrcIps;
 import static org.batfish.datamodel.matchers.HsrpGroupMatchers.hasTrackActions;
 import static org.batfish.datamodel.matchers.IkePhase1KeyMatchers.hasKeyType;
 import static org.batfish.datamodel.matchers.IkePhase1PolicyMatchers.hasIkePhase1Key;
@@ -334,6 +331,7 @@ import org.batfish.datamodel.InterfaceType;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpProtocol;
+import org.batfish.datamodel.IpSpaceReference;
 import org.batfish.datamodel.IpWildcard;
 import org.batfish.datamodel.IpsecAuthenticationAlgorithm;
 import org.batfish.datamodel.IpsecEncapsulationMode;
@@ -422,7 +420,6 @@ import org.batfish.datamodel.routing_policy.statement.TraceableStatement;
 import org.batfish.datamodel.tracking.DecrementPriority;
 import org.batfish.datamodel.transformation.Transformation;
 import org.batfish.dataplane.ibdp.IncrementalDataPlane;
-import org.batfish.dataplane.protocols.BgpProtocolHelper;
 import org.batfish.grammar.silent_syntax.SilentSyntaxCollection;
 import org.batfish.main.Batfish;
 import org.batfish.main.BatfishTestUtils;
@@ -856,17 +853,17 @@ public final class CiscoGrammarTest {
                         isAndMatchExprThat(
                             hasConjuncts(
                                 containsInAnyOrder(
-                                    ImmutableList.of(
-                                        isMatchHeaderSpaceThat(
-                                            hasHeaderSpace(
-                                                allOf(
-                                                    hasDstIps(
-                                                        isIpSpaceReferenceThat(hasName("ogn2"))),
-                                                    hasSrcIps(
-                                                        isIpSpaceReferenceThat(hasName("ogn1")))))),
-                                        isPermittedByAclThat(
-                                            hasAclName(
-                                                computeServiceObjectGroupAclName("ogs1"))))))))))));
+                                    equalTo(
+                                        matchDst(
+                                            new IpSpaceReference(
+                                                "ogn2", "Match network object-group: 'ogn2'"))),
+                                    equalTo(
+                                        matchSrc(
+                                            new IpSpaceReference(
+                                                "ogn1", "Match network object-group: 'ogn1'"))),
+                                    isPermittedByAclThat(
+                                        hasAclName(
+                                            computeServiceObjectGroupAclName("ogs1")))))))))));
 
     /*
      * We expect only object-groups ogsunused1, ognunused1 to have zero referrers
@@ -1586,6 +1583,20 @@ public final class CiscoGrammarTest {
   }
 
   @Test
+  public void testIosInterface() throws IOException {
+    Configuration c = parseConfig("ios-interface");
+    assertThat(c, hasInterface("FiftyGigE1/0/0", hasBandwidth(50e9)));
+    assertThat(c, hasInterface("FiftyGigE2/0/0", hasBandwidth(50e9)));
+    assertThat(c, hasInterface("FiftyGigE3/0/0", hasBandwidth(50e9)));
+    //
+    assertThat(c, hasInterface("FortyGigabitEthernet1/0/0", hasBandwidth(40e9)));
+    assertThat(c, hasInterface("FortyGigabitEthernet2/0/0", hasBandwidth(40e9)));
+    //
+    assertThat(c, hasInterface("HundredGigabitEthernet1/0/0", hasBandwidth(100e9)));
+    assertThat(c, hasInterface("HundredGigabitEthernet2/0/0", hasBandwidth(100e9)));
+  }
+
+  @Test
   public void testIosInterfaceDelay() throws IOException {
     Configuration c = parseConfig("ios-interface-delay");
 
@@ -2238,12 +2249,8 @@ public final class CiscoGrammarTest {
             hasLines(
                 isExprAclLineThat(
                     hasMatchCondition(
-                        isOrMatchExprThat(
-                            hasDisjuncts(
-                                contains(
-                                    isMatchHeaderSpaceThat(
-                                        hasHeaderSpace(
-                                            hasIpProtocols(contains(IpProtocol.ICMP))))))))))));
+                        isMatchHeaderSpaceThat(
+                            hasHeaderSpace(hasIpProtocols(contains(IpProtocol.ICMP)))))))));
     /* og-tcp */
     assertThat(
         c,
@@ -3875,7 +3882,7 @@ public final class CiscoGrammarTest {
     {
       // Redistribute matching EIGRP route into EBGP
       Bgpv4Route.Builder rb =
-          BgpProtocolHelper.convertNonBgpRouteToBgpRoute(
+          convertNonBgpRouteToBgpRoute(
               matchEigrp, bgpRouterId, nextHopIp, ebgpAdmin, RoutingProtocol.BGP, REDISTRIBUTE);
       assertTrue(
           bgpRedistPolicy.processBgpRoute(matchEigrp, rb, ebgpSessionProps, Direction.OUT, null));
@@ -3900,7 +3907,7 @@ public final class CiscoGrammarTest {
     {
       // Redistribute nonmatching EIGRP route to EBGP
       Bgpv4Route.Builder rb =
-          BgpProtocolHelper.convertNonBgpRouteToBgpRoute(
+          convertNonBgpRouteToBgpRoute(
               noMatchEigrp, bgpRouterId, nextHopIp, ebgpAdmin, RoutingProtocol.BGP, REDISTRIBUTE);
       assertFalse(
           bgpRedistPolicy.processBgpRoute(noMatchEigrp, rb, ebgpSessionProps, Direction.OUT, null));
@@ -3908,7 +3915,7 @@ public final class CiscoGrammarTest {
     {
       // Redistribute matching EIGRP route to IBGP
       Bgpv4Route.Builder rb =
-          BgpProtocolHelper.convertNonBgpRouteToBgpRoute(
+          convertNonBgpRouteToBgpRoute(
               matchEigrp, bgpRouterId, nextHopIp, ibgpAdmin, RoutingProtocol.IBGP, REDISTRIBUTE);
       assertTrue(
           bgpRedistPolicy.processBgpRoute(matchEigrp, rb, ibgpSessionProps, Direction.OUT, null));
@@ -3933,7 +3940,7 @@ public final class CiscoGrammarTest {
     {
       // Redistribute nonmatching EIGRP route to IBGP
       Bgpv4Route.Builder rb =
-          BgpProtocolHelper.convertNonBgpRouteToBgpRoute(
+          convertNonBgpRouteToBgpRoute(
               noMatchEigrp, bgpRouterId, nextHopIp, ibgpAdmin, RoutingProtocol.IBGP, REDISTRIBUTE);
       assertFalse(
           bgpRedistPolicy.processBgpRoute(noMatchEigrp, rb, ibgpSessionProps, Direction.OUT, null));
@@ -3952,7 +3959,7 @@ public final class CiscoGrammarTest {
               .setNetwork(matchRm)
               .build();
       Bgpv4Route.Builder rb =
-          BgpProtocolHelper.convertNonBgpRouteToBgpRoute(
+          convertNonBgpRouteToBgpRoute(
               matchEigrpEx, bgpRouterId, nextHopIp, ebgpAdmin, RoutingProtocol.BGP, REDISTRIBUTE);
       assertTrue(
           bgpRedistPolicy.processBgpRoute(matchEigrpEx, rb, ebgpSessionProps, Direction.OUT, null));
@@ -4054,9 +4061,9 @@ public final class CiscoGrammarTest {
         batfish.loadConvertConfigurationAnswerElementOrReparse(batfish.getSnapshot());
 
     String neighborIp = bgpNeighborStructureName("1.2.3.4", "default");
-    String neighborIp6 = bgpNeighborStructureName("2001:db8:85a3:0:0:8a2e:370:7334", "default");
+    String neighborIp6 = bgpNeighborStructureName("2001:db8:85a3::8a2e:370:7334", "default");
     String neighborPrefix = bgpNeighborStructureName("1.2.3.0/24", "default");
-    String neighborPrefix6 = bgpNeighborStructureName("2001:db8:0:0:0:0:0:0/32", "default");
+    String neighborPrefix6 = bgpNeighborStructureName("2001:db8::/32", "default");
 
     assertThat(
         ccae,
@@ -4332,7 +4339,7 @@ public final class CiscoGrammarTest {
             "~IPSEC_PHASE2_POLICY:mymap:30:15~",
             allOf(
                 IpsecPhase2PolicyMatchers.hasIpsecProposals(equalTo(ImmutableList.of("ts2"))),
-                IpsecPhase2PolicyMatchers.hasPfsKeyGroup(nullValue()))));
+                IpsecPhase2PolicyMatchers.hasPfsKeyGroups(empty()))));
 
     assertThat(
         c,

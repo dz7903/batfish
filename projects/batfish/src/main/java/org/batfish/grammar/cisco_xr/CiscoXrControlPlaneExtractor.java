@@ -1103,6 +1103,8 @@ public class CiscoXrControlPlaneExtractor extends CiscoXrParserBaseListener
   private static final IntegerSpace OSPF_METRIC_RANGE = IntegerSpace.of(Range.closed(1, 16777214));
   private static final IntegerSpace OSPF_METRIC_TYPE_RANGE = IntegerSpace.of(Range.closed(1, 2));
   private static final IntegerSpace PINT16_RANGE = IntegerSpace.of(Range.closed(1, 65535));
+  private static final IntegerSpace SEQUENCE_NUMBER_RANGE =
+      IntegerSpace.of(Range.closed(1, 2147483646));
   private static final IntegerSpace REWRITE_INGRESS_TAG_POP_RANGE =
       IntegerSpace.of(Range.closed(1, 2));
 
@@ -3529,6 +3531,10 @@ public class CiscoXrControlPlaneExtractor extends CiscoXrParserBaseListener
     AccessListAddressSpecifier dstAddressSpecifier = toAccessListAddressSpecifier(ctx.dstipr);
     AccessListServiceSpecifier serviceSpecifier = computeExtendedAccessListServiceSpecifier(ctx);
     String name = getFullText(ctx).trim();
+    long sequenceNumber =
+        ctx.sequence_number() != null
+            ? getSequenceNumber(ctx.sequence_number()).orElse(_currentIpv4Acl.getNextSeq())
+            : _currentIpv4Acl.getNextSeq();
 
     // reference tracking
     {
@@ -3539,11 +3545,10 @@ public class CiscoXrControlPlaneExtractor extends CiscoXrParserBaseListener
           IPV4_ACCESS_LIST_LINE, qualifiedName, IPV4_ACCESS_LIST_LINE_SELF_REF, configLine);
     }
 
-    long seq = ctx.num != null ? toLong(ctx.num) : _currentIpv4Acl.getNextSeq();
     Ipv4AccessListLine line =
         _currentIpv4AclLine
             .setName(name)
-            .setSeq(seq)
+            .setSeq(sequenceNumber)
             .setAction(action)
             .setSrcAddressSpecifier(srcAddressSpecifier)
             .setDstAddressSpecifier(dstAddressSpecifier)
@@ -3555,6 +3560,11 @@ public class CiscoXrControlPlaneExtractor extends CiscoXrParserBaseListener
       _currentIpv4Acl.addLine(line);
     }
     _currentIpv4AclLine = null;
+  }
+
+  public Optional<Long> getSequenceNumber(CiscoXrParser.Sequence_numberContext ctx) {
+    return toIntegerInSpace(ctx.getParent(), ctx, SEQUENCE_NUMBER_RANGE, "sequence number")
+        .map(Long::valueOf);
   }
 
   public Ipv4Nexthop toIpv4Nexthop(Ipv4_nexthopContext ctx) {
@@ -5510,7 +5520,7 @@ public class CiscoXrControlPlaneExtractor extends CiscoXrParserBaseListener
         Prefix6List pl = _configuration.getPrefix6Lists().computeIfAbsent(name, Prefix6List::new);
         Prefix6 prefix6;
         if (ctx.ipv6a != null) {
-          prefix6 = new Prefix6(toIp6(ctx.ipv6a), Prefix6.MAX_PREFIX_LENGTH);
+          prefix6 = Prefix6.create(toIp6(ctx.ipv6a), Prefix6.MAX_PREFIX_LENGTH);
         } else {
           prefix6 = Prefix6.parse(ctx.ipv6_prefix.getText());
         }
@@ -6389,6 +6399,8 @@ public class CiscoXrControlPlaneExtractor extends CiscoXrParserBaseListener
       _currentIpv6PeerGroup.setGroupName(groupName);
     } else if (_currentNamedPeerGroup != null) {
       _currentNamedPeerGroup.setGroupName(groupName);
+    } else if (_currentDynamicIpPeerGroup != null) {
+      _currentDynamicIpPeerGroup.setGroupName(groupName);
     } else {
       throw new BatfishException("Unexpected context for use neighbor group");
     }
@@ -8414,7 +8426,7 @@ public class CiscoXrControlPlaneExtractor extends CiscoXrParserBaseListener
           lower = prefix.getPrefixLength();
           upper = Prefix.MAX_PREFIX_LENGTH;
         } else if (pctxt.ipv6a != null) {
-          prefix6 = new Prefix6(toIp6(pctxt.ipv6a), Prefix6.MAX_PREFIX_LENGTH);
+          prefix6 = Prefix6.create(toIp6(pctxt.ipv6a), Prefix6.MAX_PREFIX_LENGTH);
           lower = prefix6.getPrefixLength();
           upper = Prefix6.MAX_PREFIX_LENGTH;
         } else if (pctxt.ipv6_prefix != null) {

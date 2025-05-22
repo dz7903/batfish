@@ -1,6 +1,7 @@
 package org.batfish.representation.juniper;
 
 import java.io.Serializable;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -21,6 +22,8 @@ public class LogicalSystem implements Serializable {
   public static final String GLOBAL_ADDRESS_BOOK_NAME = "global";
 
   private final Map<String, AddressBook> _addressBooks;
+
+  private final Map<String, AdminGroup> _adminGroups;
 
   private final Map<String, BaseApplication> _applications;
 
@@ -98,6 +101,8 @@ public class LogicalSystem implements Serializable {
 
   private final Map<String, PrefixList> _snmpClientLists;
 
+  private final Map<String, Srlg> _srlgs;
+
   private NavigableSet<String> _syslogHosts;
 
   private NavigableSet<String> _tacplusServers;
@@ -115,6 +120,7 @@ public class LogicalSystem implements Serializable {
     _addressBooks = new TreeMap<>();
     // insert the implicit global address book
     _addressBooks.put(GLOBAL_ADDRESS_BOOK_NAME, new AddressBook(GLOBAL_ADDRESS_BOOK_NAME, null));
+    _adminGroups = new TreeMap<>();
     _applications = new TreeMap<>();
     _applicationSets = new TreeMap<>();
     _asPaths = new TreeMap<>();
@@ -148,6 +154,7 @@ public class LogicalSystem implements Serializable {
     _routingInstances.put(Configuration.DEFAULT_VRF_NAME, _defaultRoutingInstance);
     _securityPolicies = new TreeMap<>();
     _snmpClientLists = new TreeMap<>();
+    _srlgs = new HashMap<>();
     _syslogHosts = new TreeSet<>();
     _tacplusServers = new TreeSet<>();
     _tunnelAttributes = new TreeMap<>();
@@ -175,6 +182,10 @@ public class LogicalSystem implements Serializable {
 
   public Map<String, AddressBook> getAddressBooks() {
     return _addressBooks;
+  }
+
+  public Map<String, AdminGroup> getAdminGroups() {
+    return _adminGroups;
   }
 
   public Map<String, BaseApplication> getApplications() {
@@ -325,25 +336,34 @@ public class LogicalSystem implements Serializable {
   }
 
   public Nat getOrCreateNat(Nat.Type natType) {
-    switch (natType) {
-      case DESTINATION:
+    return switch (natType) {
+      case DESTINATION -> {
         if (_natDestination == null) {
           _natDestination = new Nat(Type.DESTINATION);
         }
-        return _natDestination;
-      case SOURCE:
+        yield _natDestination;
+      }
+      case SOURCE -> {
         if (_natSource == null) {
           _natSource = new Nat(Type.SOURCE);
         }
-        return _natSource;
-      case STATIC:
+        yield _natSource;
+      }
+      case STATIC -> {
         if (_natStatic == null) {
           _natStatic = new Nat(Type.STATIC);
         }
-        return _natStatic;
-      default:
-        throw new IllegalArgumentException("Unknnown nat type " + natType);
-    }
+        yield _natStatic;
+      }
+    };
+  }
+
+  public @Nonnull Srlg getOrCreateSrlg(String name) {
+    return _srlgs.computeIfAbsent(name, Srlg::new);
+  }
+
+  public Map<String, Srlg> getSrlgs() {
+    return Collections.unmodifiableMap(_srlgs);
   }
 
   public Zone getOrCreateZone(String zoneName) {

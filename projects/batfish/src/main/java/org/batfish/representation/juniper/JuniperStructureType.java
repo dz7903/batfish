@@ -9,6 +9,7 @@ import org.batfish.vendor.StructureType;
 
 public enum JuniperStructureType implements StructureType {
   ADDRESS_BOOK("address-book"),
+  ADMIN_GROUP("admin-group"),
   APPLICATION("application"),
   APPLICATION_OR_APPLICATION_SET("application or application-set"),
   APPLICATION_SET("application-set"),
@@ -24,6 +25,7 @@ public enum JuniperStructureType implements StructureType {
   CONDITION("condition"),
   DHCP_RELAY_SERVER_GROUP("dhcp-relay server-group"),
   FIREWALL_FILTER("firewall filter"),
+  FIREWALL_INET6_FILTER("firewall family inet6 filter"),
   FIREWALL_FILTER_TERM("firewall filter term"),
   FIREWALL_INTERFACE_SET("firewall interface-set"),
   IKE_GATEWAY("ike gateway"),
@@ -33,6 +35,7 @@ public enum JuniperStructureType implements StructureType {
   IPSEC_POLICY("ipsec policy"),
   IPSEC_PROPOSAL("ipsec proposal"),
   LOGICAL_SYSTEM("logical-system"),
+  MPLS_PATH("mpls path"),
   NAT_POOL("nat pool"),
   NAT_RULE("nat rule"),
   NAT_RULE_SET("nat rule set"),
@@ -55,6 +58,7 @@ public enum JuniperStructureType implements StructureType {
   SECURITY_PROFILE("security-profile"),
   SNMP_CLIENT_LIST("snmp client-list"),
   SNMP_CLIENT_LIST_OR_PREFIX_LIST("snmp client-list or prefix-list"),
+  SRLG("srlg"),
   TUNNEL_ATTRIBUTE("tunnel-attribute"),
   VLAN("vlan");
 

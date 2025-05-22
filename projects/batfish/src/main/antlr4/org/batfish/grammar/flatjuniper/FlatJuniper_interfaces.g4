@@ -232,7 +232,9 @@ i_mac
 
 i_mtu
 :
-   MTU size = dec
+// maximum is chassis-dependent, but it ranges from 1 to about 16KB it looks like:
+// https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/statement/mtu-edit-interfaces-ni.html
+   MTU bytes = uint16
 ;
 
 i_native_vlan_id
@@ -350,8 +352,14 @@ if_ethernet_switching
       | ife_interface_mode
       | ife_native_vlan_id
       | ife_port_mode
+      | ife_recovery_timeout_null
       | ife_vlan
    )
+;
+
+ife_recovery_timeout_null
+:
+   RECOVERY_TIMEOUT uint16 null_filler
 ;
 
 if_inet
@@ -360,6 +368,7 @@ if_inet
    (
       apply
       | ifi_address
+      | ifi_destination_udp_port
       | ifi_filter
       | ifi_mtu
       | ifi_no_redirects
@@ -371,8 +380,22 @@ if_inet
 
 if_inet6
 :
-   INET6 null_filler
+   INET6
+   (
+      apply
+      | ifi6_destination_udp_port
+      | ifi6_filter
+      | ifi6_mtu
+   )
 ;
+
+ifi6_destination_udp_port: DESTINATION_UDP_PORT port_number;
+
+ifi6_filter: FILTER ifi6f_input;
+
+ifi6f_input: INPUT name = junos_name;
+
+ifi6_mtu: i_mtu;
 
 if_iso
 :
@@ -380,6 +403,7 @@ if_iso
    (
       apply
       | ifiso_address
+      | ifiso_destination_udp_port
       | ifiso_mtu
    )
 ;
@@ -389,6 +413,7 @@ if_mpls
    MPLS
    (
       apply
+      | ifm_destination_udp_port
       | ifm_filter
       | ifm_maximum_labels
       | ifm_mtu
@@ -481,6 +506,8 @@ ifi_filter
 :
    filter
 ;
+
+ifi_destination_udp_port: DESTINATION_UDP_PORT port_number;
 
 ifi_mtu
 :
@@ -644,10 +671,14 @@ ifiso_address
    ADDRESS iso_address
 ;
 
+ifiso_destination_udp_port: DESTINATION_UDP_PORT port_number;
+
 ifiso_mtu
 :
    MTU dec
 ;
+
+ifm_destination_udp_port: DESTINATION_UDP_PORT port_number;
 
 ifm_filter
 :

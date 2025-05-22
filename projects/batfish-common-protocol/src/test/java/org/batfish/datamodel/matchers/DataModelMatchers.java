@@ -20,6 +20,7 @@ import org.batfish.datamodel.SubRange;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.Zone;
 import org.batfish.datamodel.acl.AclLineMatchExpr;
+import org.batfish.datamodel.acl.MatchDestinationIp;
 import org.batfish.datamodel.acl.PermittedByAcl;
 import org.batfish.datamodel.answers.ConvertConfigurationAnswerElement;
 import org.batfish.datamodel.answers.ParseVendorConfigurationAnswerElement;
@@ -235,17 +236,17 @@ public final class DataModelMatchers {
 
   /**
    * Provides a matcher that matches if the provided {@link ConvertConfigurationAnswerElement} has a
-   * defined structure for {@code hostname} of type {@code type} named {@code structureName} with
+   * defined structure for {@code filename} of type {@code type} named {@code structureName} with
    * definition lines matching the provided {@code subMatcher}.
    */
   public static @Nonnull Matcher<ConvertConfigurationAnswerElement>
       hasDefinedStructureWithDefinitionLines(
-          @Nonnull String hostname,
+          @Nonnull String filename,
           @Nonnull StructureType type,
           @Nonnull String structureName,
           @Nonnull Matcher<? super Set<Integer>> subMatcher) {
     return new ConvertConfigurationAnswerElementMatchers.HasDefinedStructureWithDefinitionLines(
-        hostname, type, structureName, subMatcher);
+        filename, type, structureName, subMatcher);
   }
 
   /**
@@ -385,6 +386,15 @@ public final class DataModelMatchers {
   public static @Nonnull Matcher<AclLineMatchExpr> isPermittedByAclThat(
       @Nonnull Matcher<? super PermittedByAcl> subMatcher) {
     return new PermittedByAclMatchers.IsPermittedByAclThat(subMatcher);
+  }
+
+  /**
+   * Provides a matcher that matches if the object is a {@link
+   * org.batfish.datamodel.acl.MatchDestinationIp} matched by the provided {@code subMatcher}.
+   */
+  public static @Nonnull Matcher<AclLineMatchExpr> isMatchDestinationIpThat(
+      @Nonnull Matcher<? super MatchDestinationIp> subMatcher) {
+    return new IsInstanceThat<>(MatchDestinationIp.class, subMatcher);
   }
 
   private DataModelMatchers() {}

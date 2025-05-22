@@ -69,6 +69,23 @@ bgp_asn
     | asn4hi = uint16 PERIOD asn4lo = uint16
 ;
 
+bgp_priority_queue_number
+:
+  // 1-16
+  uint8
+;
+
+bgp_priority_queue_id
+:
+   EXPEDITED
+   | PRIORITY bgp_priority_queue_number
+;
+
+bgp_rib_name
+:
+    BGP_RIB_NAME
+;
+
 dec
 :
   UINT8
@@ -181,6 +198,30 @@ icmp6_only_type
     | PACKET_TOO_BIG
 ;
 
+inet_rib_name
+:
+INET_RIB_NAME
+;
+
+inet6_rib_name
+:
+INET6_RIB_NAME
+;
+
+iso_rib_name
+:
+ISO_RIB_NAME
+;
+
+mpls_rib_name
+:
+MPLS_RIB_NAME
+;
+
+rib_name
+:
+(bgp_rib_name | inet_rib_name | inet6_rib_name | iso_rib_name | mpls_rib_name | vxlan_rib_name )
+;
 
 interface_id: INTERFACE_ID;
 
@@ -209,6 +250,8 @@ ip_prefix_default_32: IP_PREFIX | IP_ADDRESS;
 ipv6_address: IPV6_ADDRESS;
 
 ipv6_prefix: IPV6_PREFIX;
+
+ipv6_prefix_default_128: IPV6_PREFIX | IPV6_ADDRESS;
 
 iso_address: ISO_ADDRESS;
 
@@ -509,7 +552,7 @@ secret_string
 
 certificate_string
 :
-  CERTIFICATE_STRING
+  CERTIFICATE_STRING | SCRUBBED
 ;
 
 null_filler
@@ -711,6 +754,11 @@ uint32
 uint32l
 :
   UINT32L
+;
+
+vxlan_rib_name
+:
+    VXLAN_RIB_NAME
 ;
 
 wildcard

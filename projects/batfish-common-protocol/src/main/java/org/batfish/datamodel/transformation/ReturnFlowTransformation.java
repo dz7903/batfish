@@ -17,7 +17,12 @@ import org.batfish.datamodel.acl.AndMatchExpr;
 import org.batfish.datamodel.acl.DeniedByAcl;
 import org.batfish.datamodel.acl.FalseExpr;
 import org.batfish.datamodel.acl.GenericAclLineMatchExprVisitor;
+import org.batfish.datamodel.acl.MatchDestinationIp;
+import org.batfish.datamodel.acl.MatchDestinationPort;
 import org.batfish.datamodel.acl.MatchHeaderSpace;
+import org.batfish.datamodel.acl.MatchIpProtocol;
+import org.batfish.datamodel.acl.MatchSourceIp;
+import org.batfish.datamodel.acl.MatchSourcePort;
 import org.batfish.datamodel.acl.MatchSrcInterface;
 import org.batfish.datamodel.acl.NotMatchExpr;
 import org.batfish.datamodel.acl.OrMatchExpr;
@@ -108,6 +113,16 @@ public final class ReturnFlowTransformation {
     }
 
     @Override
+    public AclLineMatchExpr visitMatchDestinationIp(MatchDestinationIp matchDestinationIp) {
+      return AclLineMatchExprs.matchSrc(matchDestinationIp.getIps());
+    }
+
+    @Override
+    public AclLineMatchExpr visitMatchDestinationPort(MatchDestinationPort matchDestinationPort) {
+      return AclLineMatchExprs.matchSrcPort(matchDestinationPort.getPorts());
+    }
+
+    @Override
     public AclLineMatchExpr visitMatchHeaderSpace(MatchHeaderSpace matchHeaderSpace) {
       HeaderSpace forwardHeaderSpace = matchHeaderSpace.getHeaderspace();
       return new MatchHeaderSpace(
@@ -121,6 +136,21 @@ public final class ReturnFlowTransformation {
               .setNotSrcPorts(forwardHeaderSpace.getNotDstPorts())
               .setNotDstPorts(forwardHeaderSpace.getNotSrcPorts())
               .build());
+    }
+
+    @Override
+    public AclLineMatchExpr visitMatchIpProtocol(MatchIpProtocol matchIpProtocol) {
+      return matchIpProtocol;
+    }
+
+    @Override
+    public AclLineMatchExpr visitMatchSourceIp(MatchSourceIp matchSourceIp) {
+      return AclLineMatchExprs.matchDst(matchSourceIp.getIps());
+    }
+
+    @Override
+    public AclLineMatchExpr visitMatchSourcePort(MatchSourcePort matchSourcePort) {
+      return AclLineMatchExprs.matchDstPort(matchSourcePort.getPorts());
     }
 
     @Override

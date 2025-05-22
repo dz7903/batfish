@@ -82,6 +82,7 @@ import org.batfish.datamodel.routing_policy.expr.MatchClusterListLength;
 import org.batfish.datamodel.routing_policy.expr.MatchInterface;
 import org.batfish.datamodel.routing_policy.expr.MatchIpv4;
 import org.batfish.datamodel.routing_policy.expr.MatchMetric;
+import org.batfish.datamodel.routing_policy.expr.MatchPeerAddress;
 import org.batfish.datamodel.routing_policy.expr.MatchPrefixSet;
 import org.batfish.datamodel.routing_policy.expr.MatchProtocol;
 import org.batfish.datamodel.routing_policy.expr.MatchSourceVrf;
@@ -383,14 +384,14 @@ public class TransferBDD {
                                     new Arg(this, currRoute, context))
                                 .stream())
                 .collect(ImmutableSet.toImmutableSet());
-        finalResults.add(
-            result
-                .setReturnValueBDD(
-                    asPathRegexesToBDD(
-                        ImmutableSet.of(SymbolicAsPathRegex.union(asPathRegexes)),
-                        _asPathRegexAtomicPredicates,
-                        routeForMatching(p, context)))
-                .setReturnValueAccepted(true));
+        BDD asPathRegexBDD =
+            asPathRegexes.isEmpty()
+                ? _factory.zero()
+                : asPathRegexesToBDD(
+                    ImmutableSet.of(SymbolicAsPathRegex.union(asPathRegexes)),
+                    _asPathRegexAtomicPredicates,
+                    routeForMatching(p, context));
+        finalResults.add(result.setReturnValueBDD(asPathRegexBDD).setReturnValueAccepted(true));
       } else {
         List<TransferResult> currResults = new ArrayList<>();
         // the default result is false
@@ -627,8 +628,6 @@ public class TransferBDD {
           p.debug("False");
           finalResults.add(result.setReturnValueBDD(_factory.one()).setReturnValueAccepted(false));
           break;
-        default:
-          throw new IllegalArgumentException("Unexpected boolean expression " + b.getType());
       }
 
     } else if (expr instanceof LegacyMatchAsPath) {
@@ -656,8 +655,7 @@ public class TransferBDD {
 
     } else if (expr instanceof MatchSourceVrf) {
       MatchSourceVrf msv = (MatchSourceVrf) expr;
-      // we add 1 to the index since 0 in the BDDDomain is used to represent the absence of a value
-      int index = _configAtomicPredicates.getSourceVrfs().indexOf(msv.getSourceVrf()) + 1;
+      int index = _configAtomicPredicates.getSourceVrfs().indexOf(msv.getSourceVrf());
       BDD sourceVrfPred = p.getData().getSourceVrfs().value(index);
       finalResults.add(result.setReturnValueBDD(sourceVrfPred).setReturnValueAccepted(true));
 
@@ -679,13 +677,22 @@ public class TransferBDD {
           mi.getInterfaces().stream()
               .map(
                   nhi -> {
-                    // we add 1 to the index since 0 in the BDDDomain is used to represent the
-                    // absence of a value
-                    int index = _configAtomicPredicates.getNextHopInterfaces().indexOf(nhi) + 1;
+                    int index = _configAtomicPredicates.getNextHopInterfaces().indexOf(nhi);
                     return p.getData().getNextHopInterfaces().value(index);
                   })
               .reduce(_factory.zero(), BDD::or);
       finalResults.add(result.setReturnValueBDD(miPred).setReturnValueAccepted(true));
+
+    } else if (expr instanceof MatchPeerAddress) {
+      MatchPeerAddress mp = (MatchPeerAddress) expr;
+      Set<Ip> ips = mp.getPeers();
+      BDD matchPABDD =
+          _originalRoute.anyElementOf(
+              ips.stream()
+                  .map(ip -> _configAtomicPredicates.getPeerAddresses().indexOf(ip))
+                  .collect(Collectors.toSet()),
+              p.getData().getPeerAddress());
+      finalResults.add(result.setReturnValueBDD(matchPABDD).setReturnValueAccepted(true));
 
     } else {
       throw new UnsupportedOperationException(expr.toString());
@@ -1294,21 +1301,13 @@ public class TransferBDD {
   // integer equality constraint represented by the given IntComparator and long value
   private BDD matchLongValueComparison(IntComparator comp, long val, MutableBDDInteger bddInt)
       throws UnsupportedOperationException {
-    switch (comp) {
-      case EQ:
-        return bddInt.value(val);
-      case GE:
-        return bddInt.geq(val);
-      case GT:
-        return bddInt.geq(val).andEq(bddInt.value(val).notEq());
-      case LE:
-        return bddInt.leq(val);
-      case LT:
-        return bddInt.leq(val).andEq(bddInt.value(val).notEq());
-      default:
-        throw new IllegalArgumentException(
-            "Unexpected int comparison " + comp.getClass().getSimpleName());
-    }
+    return switch (comp) {
+      case EQ -> bddInt.value(val);
+      case GE -> bddInt.geq(val);
+      case GT -> bddInt.geq(val).andEq(bddInt.value(val).notEq());
+      case LE -> bddInt.leq(val);
+      case LT -> bddInt.leq(val).andEq(bddInt.value(val).notEq());
+    };
   }
 
   // Produce a BDD representing a constraint on the given MutableBDDInteger that enforces the

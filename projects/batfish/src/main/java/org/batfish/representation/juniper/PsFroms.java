@@ -3,6 +3,8 @@ package org.batfish.representation.juniper;
 import com.google.common.annotations.VisibleForTesting;
 import java.io.Serializable;
 import java.util.LinkedHashSet;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Set;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -23,6 +25,8 @@ public final class PsFroms implements Serializable {
   private final Set<PsFromInterface> _fromInterfaces;
   private PsFromLocalPreference _fromLocalPreference;
   private PsFromMetric _fromMetric;
+  private final Set<PsFromNeighbor> _fromNeighbor;
+  private final List<PsFromNextHop> _fromNextHops;
   private final Set<PsFromPolicyStatement> _fromPolicyStatements;
   private final Set<PsFromPolicyStatementConjunction> _fromPolicyStatementConjunctions;
   private final Set<PsFromPrefixList> _fromPrefixLists;
@@ -30,6 +34,7 @@ public final class PsFroms implements Serializable {
   private final Set<PsFromPrefixListFilterOrLonger> _fromPrefixListFilterOrLongers;
   private final Set<PsFromProtocol> _fromProtocols;
   private final Set<PsFromRouteFilter> _fromRouteFilters;
+  private PsFromRouteType _fromRouteType;
   private final Set<PsFromTag> _fromTags;
   private PsFromUnsupported _fromUnsupported;
 
@@ -39,6 +44,8 @@ public final class PsFroms implements Serializable {
     _fromCommunities = new LinkedHashSet<>();
     _fromConditions = new LinkedHashSet<>();
     _fromInterfaces = new LinkedHashSet<>();
+    _fromNeighbor = new LinkedHashSet<>();
+    _fromNextHops = new LinkedList<>();
     _fromPolicyStatements = new LinkedHashSet<>();
     _fromPolicyStatementConjunctions = new LinkedHashSet<>();
     _fromPrefixLists = new LinkedHashSet<>();
@@ -72,6 +79,16 @@ public final class PsFroms implements Serializable {
   public void addFromInterface(@Nonnull PsFromInterface fromInterface) {
     _atLeastOneFrom = true;
     _fromInterfaces.add(fromInterface);
+  }
+
+  public void addFromNeighbor(@Nonnull PsFromNeighbor fromNeighbor) {
+    _atLeastOneFrom = true;
+    _fromNeighbor.add(fromNeighbor);
+  }
+
+  public void addFromNextHop(@Nonnull PsFromNextHop fromNextHop) {
+    _atLeastOneFrom = true;
+    _fromNextHops.add(fromNextHop);
   }
 
   public void addFromPolicyStatement(@Nonnull PsFromPolicyStatement fromPolicyStatement) {
@@ -110,6 +127,11 @@ public final class PsFroms implements Serializable {
   public void addFromRouteFilter(@Nonnull PsFromRouteFilter fromRouteFilter) {
     _atLeastOneFrom = true;
     _fromRouteFilters.add(fromRouteFilter);
+  }
+
+  public void setFromRouteType(@Nonnull PsFromRouteType fromRouteType) {
+    _atLeastOneFrom = true;
+    _fromRouteType = fromRouteType;
   }
 
   public void addFromTag(@Nonnull PsFromTag fromTag) {
@@ -171,6 +193,15 @@ public final class PsFroms implements Serializable {
     return _fromMetric;
   }
 
+  public @Nonnull Set<PsFromNeighbor> getFromNeighbor() {
+    return _fromNeighbor;
+  }
+
+  @Nonnull
+  List<PsFromNextHop> getFromNextHops() {
+    return _fromNextHops;
+  }
+
   @Nonnull
   public Set<PsFromPolicyStatement> getFromPolicyStatements() {
     return _fromPolicyStatements;
@@ -204,6 +235,10 @@ public final class PsFroms implements Serializable {
   @Nonnull
   public Set<PsFromRouteFilter> getFromRouteFilters() {
     return _fromRouteFilters;
+  }
+
+  public @Nullable PsFromRouteType getFromRouteType() {
+    return _fromRouteType;
   }
 
   @VisibleForTesting

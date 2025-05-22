@@ -5,7 +5,10 @@ import static org.batfish.datamodel.PacketHeaderConstraintsUtil.toFlow;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.and;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.match;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.matchDst;
+import static org.batfish.datamodel.acl.AclLineMatchExprs.matchDstPort;
+import static org.batfish.datamodel.acl.AclLineMatchExprs.matchIpProtocol;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.matchSrc;
+import static org.batfish.datamodel.acl.AclLineMatchExprs.matchSrcPort;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.or;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
@@ -49,10 +52,9 @@ public class PacketHeaderConstraintsUtilTest {
                 HeaderSpace.builder()
                     .setEcns(IntegerSpace.of(new SubRange(1, 3)).enumerate())
                     .build()),
-            match(HeaderSpace.builder().setIpProtocols(IpProtocol.TCP).build()),
-            match(
-                HeaderSpace.builder().setSrcPorts(new SubRange(1, 3), new SubRange(5, 6)).build()),
-            match(HeaderSpace.builder().setDstPorts(new SubRange(11, 12)).build())),
+            matchIpProtocol(IpProtocol.TCP),
+            matchSrcPort(IntegerSpace.builder().including(1, 2, 3, 5, 6).build()),
+            matchDstPort(IntegerSpace.of(new SubRange(11, 12)))),
         hs);
   }
 
@@ -103,28 +105,22 @@ public class PacketHeaderConstraintsUtilTest {
             .setIpProtocols(ImmutableSet.of(IpProtocol.TCP))
             .setApplications("ssh, dns")
             .build();
+    IpSpace srcIp = Prefix.parse("1.0.0.0/8").toIpSpace();
+    IpSpace dstIp = Prefix.parse("2.0.0.0/8").toIpSpace();
     assertEquals(
-        toAclLineMatchExpr(phc, EmptyIpSpace.INSTANCE, EmptyIpSpace.INSTANCE),
+        toAclLineMatchExpr(phc, srcIp, dstIp),
         and(
             // src ip
-            match(HeaderSpace.builder().setSrcIps(EmptyIpSpace.INSTANCE).build()),
+            matchSrc(srcIp),
             // dst ip
-            match(HeaderSpace.builder().setDstIps(EmptyIpSpace.INSTANCE).build()),
+            matchDst(dstIp),
             // ip protocols
-            match(HeaderSpace.builder().setIpProtocols(IpProtocol.TCP).build()),
+            matchIpProtocol(IpProtocol.TCP),
             // application
             or(
                 // ssh
-                match(
-                    HeaderSpace.builder()
-                        .setIpProtocols(IpProtocol.TCP)
-                        .setDstPorts(SubRange.singleton(22))
-                        .build()),
+                and(matchIpProtocol(IpProtocol.TCP), matchDstPort(22)),
                 // dns
-                match(
-                    HeaderSpace.builder()
-                        .setIpProtocols(IpProtocol.UDP)
-                        .setDstPorts(SubRange.singleton(53))
-                        .build()))));
+                and(matchIpProtocol(IpProtocol.UDP), matchDstPort(53)))));
   }
 }

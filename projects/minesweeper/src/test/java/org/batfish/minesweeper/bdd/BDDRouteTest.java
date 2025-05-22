@@ -23,7 +23,7 @@ public class BDDRouteTest {
   @Test
   public void testEquals() {
     BDDFactory factory = JFactory.init(100, 100);
-    BDDRoute orig = new BDDRoute(factory, 3, 4, 5, 6, 2, ImmutableList.of());
+    BDDRoute orig = new BDDRoute(factory, 3, 4, 5, 6, 7, 2, ImmutableList.of());
     BDDRoute admin = new BDDRoute(orig);
     admin.getAdminDist().setValue(1);
     BDDRoute asPathRegex = new BDDRoute(orig);
@@ -62,6 +62,8 @@ public class BDDRouteTest {
     tag.getTag().setValue(1);
     BDDRoute tracks = new BDDRoute(orig);
     tracks.getTracks()[0] = factory.one();
+    BDDRoute peerAddress = new BDDRoute(orig);
+    peerAddress.getPeerAddress().setValue(1);
     BDDRoute tunnelEncapsulationAttribute = new BDDRoute(orig);
     tunnelEncapsulationAttribute.getTunnelEncapsulationAttribute().setValue(Value.absent());
     BDDRoute unsupported = new BDDRoute(orig);
@@ -82,6 +84,7 @@ public class BDDRouteTest {
         .addEqualityGroup(nextHopSet)
         .addEqualityGroup(originType)
         .addEqualityGroup(ospfMetric)
+        .addEqualityGroup(peerAddress)
         .addEqualityGroup(prefix)
         .addEqualityGroup(prefixLength)
         .addEqualityGroup(prependedAses)
@@ -98,7 +101,7 @@ public class BDDRouteTest {
   @Test
   public void testWellFormedOriginType() {
     BDDFactory factory = JFactory.init(100, 100);
-    BDDRoute route = new BDDRoute(factory, 0, 0, 0, 0, 0, ImmutableList.of());
+    BDDRoute route = new BDDRoute(factory, 0, 0, 0, 0, 0, 0, ImmutableList.of());
 
     BDD anyOriginType =
         factory.orAll(
@@ -111,6 +114,6 @@ public class BDDRouteTest {
             () -> route.getOriginType().satAssignmentToValue(anyOriginType.not()));
     assertThat(
         thrown, ThrowableMessageMatcher.hasMessage(containsString("is not valid in this domain")));
-    assertThat(route.bgpWellFormednessConstraints().and(anyOriginType.not()), isZero());
+    assertThat(route.wellFormednessConstraints(true).and(anyOriginType.not()), isZero());
   }
 }

@@ -11,6 +11,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.ImmutableList;
 import com.google.errorprone.annotations.FormatMethod;
 import java.io.Serializable;
 import java.util.Arrays;
@@ -46,6 +47,17 @@ public class Warnings implements Serializable {
           logger.isActive(LEVEL_UNIMPLEMENTED));
     }
   }
+
+  /**
+   * Indicates that this warning will cause the config to not successfully commit onto the device
+   */
+  public static final String FATAL_FLAG = "FATAL: ";
+
+  /**
+   * Indicates that this warning is for a construct on the device that may result in unexpected
+   * undesired behavior
+   */
+  public static final String RISKY_FLAG = "RISK: ";
 
   public static final String TAG_PEDANTIC = "MISCELLANEOUS";
 
@@ -184,6 +196,32 @@ public class Warnings implements Serializable {
     redFlag(String.format(format, args));
   }
 
+  /** Indicate that this red flag warning is a fatal error */
+  @FormatMethod
+  public void fatalRedFlag(String msg, Object... args) {
+    redFlag(FATAL_FLAG + String.format(msg, args));
+  }
+
+  /** Get all red flag warnings that are fatal error */
+  @JsonIgnore
+  public SortedSet<Warning> getFatalRedFlagWarnings() {
+    SortedSet<Warning> fatalWarnings = new TreeSet<>();
+    for (Warning warning : _redFlagWarnings) {
+      if (warning.getText().startsWith(FATAL_FLAG)) {
+        fatalWarnings.add(warning);
+      }
+    }
+    return fatalWarnings;
+  }
+
+  /** Get all red flag warnings that are fatal error */
+  @JsonIgnore
+  public List<ParseWarning> getRiskyParseWarnings() {
+    return _parseWarnings.stream()
+        .filter(warning -> warning.getComment().startsWith(RISKY_FLAG))
+        .collect(ImmutableList.toImmutableList());
+  }
+
   /**
    * Adds a note that there is work to do to handle the given {@link ParserRuleContext}. The output
    * will include the text of the given {@code line} and, for debugging/implementation, the current
@@ -219,6 +257,25 @@ public class Warnings implements Serializable {
     String ruleStack = ctx.toString(Arrays.asList(parser.getParser().getRuleNames()));
     String trimmedLine = line.trim();
     _parseWarnings.add(new ParseWarning(lineNumber, trimmedLine, ruleStack, comment));
+  }
+
+  /** Wrapper around addWarning for risky warnings */
+  public void addRiskyWarning(
+      @Nonnull ParserRuleContext ctx,
+      @Nonnull String line,
+      @Nonnull BatfishCombinedParser<?, ?> parser,
+      @Nonnull String comment) {
+    addWarning(ctx, line, parser, Warnings.RISKY_FLAG + comment);
+  }
+
+  /** Wrapper around addWarningOnLine for risky warnings */
+  public void addRiskyWarningOnLine(
+      int lineNumber,
+      @Nonnull ParserRuleContext ctx,
+      @Nonnull String line,
+      @Nonnull BatfishCombinedParser<?, ?> parser,
+      @Nonnull String comment) {
+    addWarningOnLine(lineNumber, ctx, line, parser, Warnings.RISKY_FLAG + comment);
   }
 
   /**

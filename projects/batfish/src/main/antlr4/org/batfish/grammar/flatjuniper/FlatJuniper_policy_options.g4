@@ -51,11 +51,14 @@ pocond_if_route_exists
   (
     pocondi_address_family
     | pocondiafi_prefix
+    | pocondiafi_prefix6
     | pocondiafi_table
   )
 ;
 
-pocondiafi_prefix: prefix = ip_prefix;
+pocondiafi_prefix: prefix = ip_prefix_default_32;
+
+pocondiafi_prefix6: prefix = ipv6_prefix_default_128;
 
 pocondiafi_table: TABLE name = junos_name;
 
@@ -138,7 +141,7 @@ poplt_network
 
 poplt_network6
 :
-   network = ipv6_prefix
+   network = ipv6_prefix_default_128
 ;
 
 pops_common
@@ -167,6 +170,7 @@ pops_from
       | popsf_local_preference
       | popsf_metric
       | popsf_neighbor
+      | popsf_next_hop
       | popsf_origin
       | popsf_policy
       | popsf_prefix_list
@@ -290,8 +294,17 @@ popsf_neighbor
 :
    NEIGHBOR
    (
-      IP_ADDRESS
-      | IPV6_ADDRESS
+      v4 = ip_address
+      | v6 = ipv6_address
+   )
+;
+
+popsf_next_hop
+:
+   NEXT_HOP
+   (
+      v4 = ip_address
+      | v6 = ipv6_address
    )
 ;
 
@@ -341,7 +354,7 @@ popsf_protocol
 
 popsf_rib
 :
-   RIB name = junos_name
+   RIB name = rib_name
 ;
 
 popsf_route_filter
@@ -349,7 +362,7 @@ popsf_route_filter
    ROUTE_FILTER
    (
       prefix = ip_prefix_default_32
-      | ipv6_prefix
+      | prefix6 = ipv6_prefix_default_128
    ) popsfrf_common then = popsfrf_then?
 ;
 
@@ -446,7 +459,7 @@ popsfrf_through
    THROUGH
    (
       prefix = ip_prefix_default_32
-      | ipv6_prefix
+      | prefix6 = ipv6_prefix_default_128
    )
 ;
 
@@ -480,6 +493,11 @@ popst_as_path_prepend
    AS_PATH_PREPEND bgp_asn+
 ;
 
+popst_bgp_output_queue_priority
+:
+  BGP_OUTPUT_QUEUE_PRIORITY bgp_priority_queue_id
+;
+
 popst_color
 :
    COLOR
@@ -503,6 +521,7 @@ popst_common
    popst_accept
    | popst_as_path_expand
    | popst_as_path_prepend
+   | popst_bgp_output_queue_priority
    | popst_color
    | popst_color2
    | popst_community_add
@@ -531,6 +550,7 @@ popst_common
    | popst_priority
    | popst_reject
    | popst_tag
+   | popst_tag2
    | popst_tunnel_attribute
 ;
 
@@ -719,6 +739,11 @@ popst_tag
    TAG uint32
 ;
 
+popst_tag2
+:
+   TAG2 uint32
+;
+
 popst_tunnel_attribute
 :
    TUNNEL_ATTRIBUTE
@@ -739,7 +764,7 @@ popsto_level
 
 popsto_rib
 :
-   RIB junos_name
+   RIB rib_name
 ;
 
 s_policy_options

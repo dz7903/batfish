@@ -269,7 +269,7 @@ public final class Convert {
         List<Match> matchList = convertJuniperMatch(config, term.getFroms());
         boolean permit = false;
         List<Setter> setterList = new ArrayList<>();
-        for (PsThen then: term.getThens()) {
+        for (PsThen then: term.getThens().getAllThens()) {
             if (then instanceof PsThenAccept) {
                 permit = true;
                 break;

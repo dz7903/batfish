@@ -3,9 +3,10 @@ package org.batfish.question.vendorspecific.ir;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 public class RouteMap implements Serializable {
-    public final List<Clause> clauses;
+    @JsonInclude(JsonInclude.Include.NON_NULL) public final List<Clause> clauses;
 
     public RouteMap(List<Clause> clauses) {
         this.clauses = clauses;

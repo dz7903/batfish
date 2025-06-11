@@ -5,7 +5,7 @@ import org.batfish.datamodel.Ip;
 import javax.annotation.Nullable;
 import java.io.Serializable;
 import java.util.ArrayList;
-//import java.util.List;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 public class Interface implements Serializable {
     public final Ip localIp;
@@ -13,10 +13,10 @@ public class Interface implements Serializable {
     public final Ip remoteIp;
     @Nullable public final Long remoteAs;
     public final boolean isInternal;
-    @Nullable public final ArrayList<RouteMap> importRouteMaps;
-    @Nullable public final ArrayList<RouteMap> exportRouteMaps;
+    @JsonInclude(JsonInclude.Include.NON_NULL) public final ArrayList<RouteMap> importRouteMaps;
+    @JsonInclude(JsonInclude.Include.NON_NULL) public final ArrayList<RouteMap> exportRouteMaps;
 
-    public Interface(Ip localIp, Long localAs, Ip remoteIp, Long remoteAs, boolean isInternal, ArrayList<RouteMap> importRouteMaps, ArrayList<RouteMap> exportRouteMaps) {
+    public Interface(Ip localIp, Long localAs, Ip remoteIp, @Nullable Long remoteAs, boolean isInternal, ArrayList<RouteMap> importRouteMaps, ArrayList<RouteMap> exportRouteMaps) {
         this.localIp = localIp;
         this.localAs = localAs;
         this.remoteIp = remoteIp;

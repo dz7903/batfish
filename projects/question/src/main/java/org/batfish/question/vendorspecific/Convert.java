@@ -29,6 +29,7 @@ import org.batfish.representation.cisco.RouteMapSetLine;
 import org.batfish.representation.cisco.RouteMapSetLocalPreferenceLine;
 import org.batfish.representation.cisco.StandardCommunityList;
 import org.batfish.representation.cisco.StandardCommunityListLine;
+//import org.batfish.representation.f5_bigip.Route;
 import org.batfish.representation.juniper.CommunityMember;
 import org.batfish.representation.juniper.JuniperConfiguration;
 import org.batfish.representation.juniper.LiteralCommunityMember;
@@ -153,10 +154,10 @@ public final class Convert {
     }
 
     public static RouteMap convertCiscoRouteMap(CiscoConfiguration config, org.batfish.representation.cisco.RouteMap rm) {
-        List<Clause> clauses = rm.getClauses().navigableKeySet()
-                .stream()
-                .map(key -> convertCiscoClause(config, rm.getClauses().get(key)))
-                .toList();
+            List<Clause> clauses = rm.getClauses().navigableKeySet()
+                    .stream()
+                    .map(key -> convertCiscoClause(config, rm.getClauses().get(key)))
+                    .toList();
         return new RouteMap(clauses);
     }
 

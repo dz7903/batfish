@@ -8,11 +8,11 @@ public class Clause implements Serializable {
 
     @JsonInclude(JsonInclude.Include.NON_NULL) public final List<Match> matchList;
     @JsonInclude(JsonInclude.Include.NON_NULL) public final List<Setter> setterList;
-    public boolean permit;
+    @JsonInclude(JsonInclude.Include.NON_NULL) public final Action action;
 
-    public Clause(List<Match> matchList, List<Setter> setterList, boolean permit) {
+    public Clause(List<Match> matchList, List<Setter> setterList, Action action) {
         this.matchList = matchList;
         this.setterList = setterList;
-        this.permit = permit;
+        this.action = action;
     }
 }

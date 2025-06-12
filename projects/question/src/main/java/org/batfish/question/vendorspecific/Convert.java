@@ -5,13 +5,18 @@ import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.bgp.community.StandardCommunity;
 import org.batfish.datamodel.routing_policy.expr.LiteralLong;
 import org.batfish.datamodel.routing_policy.expr.LongExpr;
+import org.batfish.question.vendorspecific.ir.Action;
 import org.batfish.question.vendorspecific.ir.AddCommunity;
 import org.batfish.question.vendorspecific.ir.Clause;
 import org.batfish.question.vendorspecific.ir.DeleteCommunity;
+import org.batfish.question.vendorspecific.ir.DenyAction;
 import org.batfish.question.vendorspecific.ir.Match;
 import org.batfish.question.vendorspecific.ir.MatchCommunity;
 import org.batfish.question.vendorspecific.ir.MatchNothing;
 import org.batfish.question.vendorspecific.ir.MatchPrefix;
+import org.batfish.question.vendorspecific.ir.NextClauseAction;
+import org.batfish.question.vendorspecific.ir.NextPolicyAction;
+import org.batfish.question.vendorspecific.ir.PermitAction;
 import org.batfish.question.vendorspecific.ir.RouteMap;
 import org.batfish.question.vendorspecific.ir.SetCommunity;
 import org.batfish.question.vendorspecific.ir.SetLocalPreference;
@@ -150,7 +155,14 @@ public final class Convert {
                 .map(line -> convertCiscoSetter(config, line))
                 .toList();
         boolean permit = clause.getAction() == LineAction.PERMIT;
-        return new Clause(matchList, setterList, permit);
+        Action action;
+        if(permit){
+            action = new PermitAction();
+        }
+        else{
+            action = new DenyAction();
+        }
+        return new Clause(matchList, setterList, action);
     }
 
     public static RouteMap convertCiscoRouteMap(CiscoConfiguration config, org.batfish.representation.cisco.RouteMap rm) {
@@ -268,25 +280,27 @@ public final class Convert {
 
     public static Clause convertJuniperClause(JuniperConfiguration config, PsTerm term) {
         List<Match> matchList = convertJuniperMatch(config, term.getFroms());
-        boolean permit = false;
+        Action action = new DenyAction();
         List<Setter> setterList = new ArrayList<>();
         for (PsThen then: term.getThens().getAllThens()) {
-            if (then instanceof PsThenAccept) {
-                permit = true;
-                break;
-            } else if (then instanceof PsThenReject) {
-                break;
-            } else if (then instanceof PsThenNextPolicy) {
-                warn("then next policy is not supported; will be the same as then reject");
-                break;
-            } else {
+            if(then instanceof PsThenAccept) {
+                action = new PermitAction();
+            }
+            else if(then instanceof PsThenReject) {
+                action = new DenyAction();
+            }
+            else if(then instanceof PsThenNextPolicy){
+                action = new NextPolicyAction();
+            }
+            else{
+                action = new NextClauseAction();
                 Setter setter = convertJuniperSetter(config, then);
                 if (setter != null) {
                     setterList.add(setter);
                 }
             }
         }
-        return new Clause(matchList, setterList, permit);
+        return new Clause(matchList, setterList, action);
     }
 
     public static RouteMap convertJuniperRouteMap(JuniperConfiguration config, PolicyStatement ps) {

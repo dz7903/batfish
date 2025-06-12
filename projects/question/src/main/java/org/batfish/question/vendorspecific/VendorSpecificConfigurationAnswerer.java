@@ -2,7 +2,6 @@ package org.batfish.question.vendorspecific;
 
 import com.google.common.collect.ImmutableList;
 import org.batfish.common.Answerer;
-//import org.batfish.common.BatfishException;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.Ip;
@@ -25,7 +24,6 @@ import org.batfish.representation.juniper.RoutingInstance;
 import org.batfish.representation.juniper.IpBgpGroup;
 import org.batfish.vendor.VendorConfiguration;
 
-//import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -82,28 +80,15 @@ public class VendorSpecificConfigurationAnswerer extends Answerer {
             long remoteAs = peerGroup.getRemoteAs();
             Ip remoteIp = peerGroup.getIp();
 
-            //RouteMap importRouteMap = routeMaps.get(peerGroup.getInboundRouteMap());
-
-            //routeMap arrayList test
             ArrayList<RouteMap> importRouteMaps = new ArrayList<>();
             if(routeMaps.get(peerGroup.getInboundRouteMap()) != null) {
                 importRouteMaps.add(routeMaps.get(peerGroup.getInboundRouteMap()));
             }
 
-//            if (importRouteMap == null) {
-//                throw new BatfishException("can't find import route map " + peerGroup.getInboundRouteMap() + " in " + name);
-//            }
-
-//            RouteMap exportRouteMap = routeMaps.get(peerGroup.getOutboundRouteMap());
-
             ArrayList<RouteMap> exportRouteMaps = new ArrayList<>();
             if(routeMaps.get(peerGroup.getOutboundRouteMap()) != null) {
                 exportRouteMaps.add(routeMaps.get(peerGroup.getOutboundRouteMap()));
             }
-
-//            if (exportRouteMap == null) {
-//                throw new BatfishException("can't find export route map " + peerGroup.getOutboundRouteMap() + " in " + name);
-//            }
 
             interfaces.add(new Interface(null, asNum, remoteIp, remoteAs, asNum == remoteAs, importRouteMaps, exportRouteMaps));
         }
@@ -147,25 +132,14 @@ public class VendorSpecificConfigurationAnswerer extends Answerer {
                 boolean isInternal = ig.getType() == BgpGroup.BgpGroupType.INTERNAL;
 
                 ArrayList<RouteMap> importRouteMaps = new ArrayList<>();
-//                RouteMap importRouteMap = new RouteMap();
                 for (String importPolicy : ig.getImportPolicies()) {
                     RouteMap routeMap = routeMaps.get(importPolicy);
-
-//                    if (routeMap == null) {
-//                        throw new BatfishException("can't find route map " + importPolicy + " in " + name);
-//                    }
-//                    importRouteMap.merge(routeMap);
                     importRouteMaps.add(routeMap);
                 }
 
                 ArrayList<RouteMap> exportRouteMaps = new ArrayList<>();
-//                RouteMap exportRouteMap = new RouteMap();
                 for (String exportPolicy : ig.getExportPolicies()) {
                     RouteMap routeMap = routeMaps.get(exportPolicy);
-//                    if (routeMap == null) {
-//                        throw new BatfishException("can't find route map " + exportPolicy + " in " + name);
-//                    }
-//                    exportRouteMap.merge(routeMap);
                     exportRouteMaps.add(routeMap);
                 }
                 interfaces.add(new Interface(localIp, localAs, remoteIp, remoteAs, isInternal, importRouteMaps, exportRouteMaps));

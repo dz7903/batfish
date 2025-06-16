@@ -8,6 +8,7 @@ import org.batfish.datamodel.routing_policy.expr.LongExpr;
 import org.batfish.question.vendorspecific.ir.Action;
 import org.batfish.question.vendorspecific.ir.AddCommunity;
 import org.batfish.question.vendorspecific.ir.Clause;
+import org.batfish.question.vendorspecific.ir.CommunityList;
 import org.batfish.question.vendorspecific.ir.DeleteCommunity;
 import org.batfish.question.vendorspecific.ir.DenyAction;
 import org.batfish.question.vendorspecific.ir.Match;
@@ -16,15 +17,20 @@ import org.batfish.question.vendorspecific.ir.MatchNothing;
 import org.batfish.question.vendorspecific.ir.MatchPrefix;
 import org.batfish.question.vendorspecific.ir.NextClauseAction;
 import org.batfish.question.vendorspecific.ir.NextPolicyAction;
+import org.batfish.question.vendorspecific.ir.NormalCommunityList;
 import org.batfish.question.vendorspecific.ir.PermitAction;
+import org.batfish.question.vendorspecific.ir.RegexCommunityList;
 import org.batfish.question.vendorspecific.ir.RouteMap;
 import org.batfish.question.vendorspecific.ir.SetCommunity;
 import org.batfish.question.vendorspecific.ir.SetLocalPreference;
 import org.batfish.question.vendorspecific.ir.Setter;
 import org.batfish.representation.cisco.CiscoConfiguration;
+import org.batfish.representation.cisco.ExpandedCommunityList;
+import org.batfish.representation.cisco.ExpandedCommunityListLine;
 import org.batfish.representation.cisco.PrefixListLine;
 import org.batfish.representation.cisco.RouteMapClause;
 import org.batfish.representation.cisco.RouteMapMatchCommunityListLine;
+//import org.batfish.representation.cisco.RouteMapMatchExtcommunityLine;
 import org.batfish.representation.cisco.RouteMapMatchIpPrefixListLine;
 import org.batfish.representation.cisco.RouteMapMatchLine;
 import org.batfish.representation.cisco.RouteMapSetAdditiveCommunityLine;
@@ -34,7 +40,6 @@ import org.batfish.representation.cisco.RouteMapSetLine;
 import org.batfish.representation.cisco.RouteMapSetLocalPreferenceLine;
 import org.batfish.representation.cisco.StandardCommunityList;
 import org.batfish.representation.cisco.StandardCommunityListLine;
-//import org.batfish.representation.f5_bigip.Route;
 import org.batfish.representation.juniper.CommunityMember;
 import org.batfish.representation.juniper.JuniperConfiguration;
 import org.batfish.representation.juniper.LiteralCommunityMember;
@@ -55,6 +60,7 @@ import org.batfish.representation.juniper.PsThenCommunitySet;
 import org.batfish.representation.juniper.PsThenLocalPreference;
 import org.batfish.representation.juniper.PsThenNextPolicy;
 import org.batfish.representation.juniper.PsThenReject;
+import org.batfish.representation.juniper.RegexCommunityMember;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -68,32 +74,69 @@ public final class Convert {
         VendorSpecificConfigurationAnswerer.warn(message, args);
     }
 
-    private static HashSet<String> convertCiscoCommunityList(CiscoConfiguration config, String listName) {
+    private static List<Set<String>> convertCiscoCommunityList(CiscoConfiguration config, String listName) {
         StandardCommunityList communityList = config.getStandardCommunityLists().get(listName);
-        if (communityList == null) {
+        ExpandedCommunityList expandedCommunityList = config.getExpandedCommunityLists().get(listName);
+        if (communityList == null && expandedCommunityList == null) {
             throw new IllegalArgumentException("can't find community list " + listName);
         }
 
-        HashSet<String> communities = new HashSet<>();
-        for (StandardCommunityListLine communityListLine : communityList.getLines()) {
-            if (communityListLine.getAction() != LineAction.PERMIT) {
-                throw new IllegalArgumentException("DENY in community list " + communityList.getName() + " is not supported");
+        Set<String> communities = new HashSet<>();
+        if (communityList != null) {
+            for (StandardCommunityListLine communityListLine : communityList.getLines()) {
+                if (communityListLine.getAction() != LineAction.PERMIT) {
+                    throw new IllegalArgumentException("DENY in community list " + communityList.getName() + " is not supported");
+                }
+                for (StandardCommunity community : communityListLine.getCommunities()) {
+                    communities.add(community.toString());
+                }
             }
-            for (StandardCommunity community : communityListLine.getCommunities()) {
-                communities.add(community.toString());
-            }
+            Set<String> return_2 = new HashSet<>();
+            return_2.add("standard");
+            List<Set<String>> return_list = new ArrayList<>();
+            return_list.add(communities);
+            return_list.add(return_2);
+            return return_list;
+
         }
-        return communities;
+        else {
+            for (ExpandedCommunityListLine communityListLine : expandedCommunityList.getLines()) {
+                if (communityListLine.getAction() != LineAction.PERMIT) {
+                    throw new IllegalArgumentException("DENY in community list " + communityList.getName() + " is not supported");
+                }
+                communities.add(communityListLine.getRegex());
+            }
+            Set<String> return_2 = new HashSet<>();
+            return_2.add("expanded");
+            List<Set<String>> return_list = new ArrayList<>();
+            return_list.add(communities);
+            return_list.add(return_2);
+            return return_list;
+        }
     }
 
     public static Match convertCiscoMatch(CiscoConfiguration config, RouteMapMatchLine matchLine) {
         if (matchLine instanceof RouteMapMatchCommunityListLine line) {
             Set<String> tags = new HashSet<>();
+            String type = "";
             for (String listName : line.getListNames()) {
-                tags.addAll(convertCiscoCommunityList(config, listName));
+                Set<String> communities = convertCiscoCommunityList(config, listName).get(0);
+                tags.addAll(communities);
+                if(convertCiscoCommunityList(config, listName).get(1).contains("standard")){
+                    type = "standard";
+                }
+                else{
+                    type = "expanded";
+                }
             }
-            return new MatchCommunity(tags);
-        } else if (matchLine instanceof RouteMapMatchIpPrefixListLine line) {
+            if (type.equals("standard")){
+                return new MatchCommunity(new NormalCommunityList(tags));
+            }
+            else{
+                return new MatchCommunity(new RegexCommunityList(tags));
+            }
+
+        }else if (matchLine instanceof RouteMapMatchIpPrefixListLine line) {
             Set<Prefix> prefix = new HashSet<>();
 
             for (String listName : line.getListNames()) {
@@ -125,14 +168,14 @@ public final class Convert {
         if (setLine instanceof RouteMapSetCommunityLine line) {
             Set<String> tags = line.getCommunities()
                     .stream().map(tag -> StandardCommunity.of(tag).toString()).collect(Collectors.toSet());
-            return new SetCommunity(tags);
+            return new SetCommunity(new NormalCommunityList(tags));
         } else if (setLine instanceof RouteMapSetAdditiveCommunityLine line) {
             Set<String> tags = line.getCommunities()
                     .stream().map(StandardCommunity::toString).collect(Collectors.toSet());
-            return new AddCommunity(tags);
+            return new AddCommunity(new NormalCommunityList(tags));
         } else if (setLine instanceof RouteMapSetDeleteCommunityLine line) {
-            Set<String> tags = convertCiscoCommunityList(config, line.getListName());
-            return new DeleteCommunity(tags);
+            Set<String> tags = convertCiscoCommunityList(config, line.getListName()).get(0);
+            return new DeleteCommunity(new NormalCommunityList(tags));
         } else if (setLine instanceof RouteMapSetLocalPreferenceLine line) {
             LongExpr expr = line.getLocalPreference();
             if (expr instanceof LiteralLong literal) {
@@ -173,7 +216,7 @@ public final class Convert {
         return new RouteMap(clauses);
     }
 
-    private static Set<String> convertJuniperCommunity(JuniperConfiguration config, String communityName) {
+    private static CommunityList convertJuniperCommunity(JuniperConfiguration config, String communityName) {
         NamedCommunity community = config.getMasterLogicalSystem().getNamedCommunities().get(communityName);
         if (community == null) {
             throw new IllegalArgumentException("Can't find named community " + communityName);
@@ -183,11 +226,14 @@ public final class Convert {
         for (CommunityMember communityMember : community.getMembers()) {
             if (communityMember instanceof LiteralCommunityMember literalCommunityMember) {
                 communities.add(literalCommunityMember.getCommunity().toString());
-            } else {
-                warn("regex community member %s in %s is not supported ", communityMember, community.getName());
+                return new NormalCommunityList(communities);
+            } else if(communityMember instanceof RegexCommunityMember regexCommunityMember) {
+                communities.add(regexCommunityMember.getRegex());
+                return new RegexCommunityList(communities);
+//                warn("regex community member %s in %s is not supported ", communityMember, community.getName());
             }
         }
-        return communities;
+        return new NormalCommunityList(communities);
     }
 
     private static Set<Prefix> convertJuniperPrefixList(JuniperConfiguration config, String listName) {
@@ -201,7 +247,7 @@ public final class Convert {
     public static List<Match> convertJuniperMatch(JuniperConfiguration config, PsFroms froms) {
         List<Match> matchList = new ArrayList<>();
         for (PsFromCommunity fromCommunity : froms.getFromCommunities()) {
-            Set<String> tags = convertJuniperCommunity(config, fromCommunity.getName());
+            CommunityList tags = convertJuniperCommunity(config, fromCommunity.getName());
             matchList.add(new MatchCommunity(tags));
         }
 
@@ -258,13 +304,13 @@ public final class Convert {
 
     @Nullable public static Setter convertJuniperSetter(JuniperConfiguration config, PsThen psThen) {
         if (psThen instanceof PsThenCommunityAdd then) {
-            Set<String> communities = convertJuniperCommunity(config, then.getName());
+            CommunityList communities = convertJuniperCommunity(config, then.getName());
             return new AddCommunity(communities);
         } else if (psThen instanceof PsThenCommunitySet then) {
-            Set<String> communities = convertJuniperCommunity(config, then.getName());
+            CommunityList communities = convertJuniperCommunity(config, then.getName());
             return new SetCommunity(communities);
         } else if (psThen instanceof PsThenCommunityDelete then) {
-            Set<String> communities = convertJuniperCommunity(config, then.getName());
+            CommunityList communities = convertJuniperCommunity(config, then.getName());
             return new DeleteCommunity(communities);
         } else if (psThen instanceof PsThenLocalPreference then) {
             return new SetLocalPreference(then.getLocalPreference());
@@ -280,7 +326,7 @@ public final class Convert {
 
     public static Clause convertJuniperClause(JuniperConfiguration config, PsTerm term) {
         List<Match> matchList = convertJuniperMatch(config, term.getFroms());
-        Action action = new DenyAction();
+        Action action = new NextClauseAction();
         List<Setter> setterList = new ArrayList<>();
         for (PsThen then: term.getThens().getAllThens()) {
             if(then instanceof PsThenAccept) {
@@ -293,7 +339,6 @@ public final class Convert {
                 action = new NextPolicyAction();
             }
             else{
-                action = new NextClauseAction();
                 Setter setter = convertJuniperSetter(config, then);
                 if (setter != null) {
                     setterList.add(setter);

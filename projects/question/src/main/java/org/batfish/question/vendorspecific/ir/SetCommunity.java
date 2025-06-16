@@ -1,14 +1,15 @@
 package org.batfish.question.vendorspecific.ir;
 
 import java.io.Serializable;
+import java.util.List;
 //import java.util.Set;
 
 public class SetCommunity extends Setter implements Serializable {
     public final String type = "set_community";
 
-    public final CommunityList communities;
+    public final List<CommunityList> communityLists;
 
-    public SetCommunity(CommunityList communities) {
-        this.communities = communities;
+    public SetCommunity(List<CommunityList> communityLists) {
+        this.communityLists = communityLists;
     }
 }

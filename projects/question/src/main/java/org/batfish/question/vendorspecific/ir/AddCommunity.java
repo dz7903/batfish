@@ -2,7 +2,6 @@ package org.batfish.question.vendorspecific.ir;
 
 import java.io.Serializable;
 import java.util.List;
-//import java.util.Set;
 
 public class AddCommunity extends Setter implements Serializable {
     public final String type = "add_community";

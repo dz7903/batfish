@@ -20,7 +20,7 @@ import org.batfish.question.vendorspecific.ir.NextPolicyAction;
 import org.batfish.question.vendorspecific.ir.NormalCommunityList;
 import org.batfish.question.vendorspecific.ir.PermitAction;
 import org.batfish.question.vendorspecific.ir.RegexCommunityList;
-import org.batfish.question.vendorspecific.ir.RouteMap;
+import org.batfish.question.vendorspecific.ir.Policy;
 import org.batfish.question.vendorspecific.ir.SetCommunity;
 import org.batfish.question.vendorspecific.ir.SetLocalPreference;
 import org.batfish.question.vendorspecific.ir.Setter;
@@ -30,7 +30,6 @@ import org.batfish.representation.cisco.ExpandedCommunityListLine;
 import org.batfish.representation.cisco.PrefixListLine;
 import org.batfish.representation.cisco.RouteMapClause;
 import org.batfish.representation.cisco.RouteMapMatchCommunityListLine;
-//import org.batfish.representation.cisco.RouteMapMatchExtcommunityLine;
 import org.batfish.representation.cisco.RouteMapMatchIpPrefixListLine;
 import org.batfish.representation.cisco.RouteMapMatchLine;
 import org.batfish.representation.cisco.RouteMapSetAdditiveCommunityLine;
@@ -209,12 +208,12 @@ public final class Convert {
         return new Clause(matchList, setterList, action);
     }
 
-    public static RouteMap convertCiscoRouteMap(CiscoConfiguration config, org.batfish.representation.cisco.RouteMap rm) {
+    public static Policy convertCiscoPolicy(CiscoConfiguration config, org.batfish.representation.cisco.RouteMap rm) {
             List<Clause> clauses = rm.getClauses().navigableKeySet()
                     .stream()
                     .map(key -> convertCiscoClause(config, rm.getClauses().get(key)))
                     .toList();
-        return new RouteMap(clauses);
+        return new Policy(clauses);
     }
 
     private static List<CommunityList> convertJuniperCommunity(JuniperConfiguration config, String communityName) {
@@ -350,12 +349,12 @@ public final class Convert {
         return new Clause(matchList, setterList, action);
     }
 
-    public static RouteMap convertJuniperRouteMap(JuniperConfiguration config, PolicyStatement ps) {
+    public static Policy convertJuniperPolicy(JuniperConfiguration config, PolicyStatement ps) {
         List<Clause> clauses = ps.getTerms().values().stream().map(term -> convertJuniperClause(config, term)).collect(Collectors.toList());
         boolean hasDefaultTerm = ps.getDefaultTerm().hasAtLeastOneFrom() || !ps.getDefaultTerm().getThens().isEmpty();
         if (hasDefaultTerm) {
             clauses.add(convertJuniperClause(config, ps.getDefaultTerm()));
         }
-        return new RouteMap(clauses);
+        return new Policy(clauses);
     }
 }

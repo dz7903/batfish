@@ -222,17 +222,21 @@ public final class Convert {
             throw new IllegalArgumentException("Can't find named community " + communityName);
         }
 
-        Set<String> communities = new HashSet<>();
+        Set<String> normalCommunities = new HashSet<>();
+        Set<String> regexCommunities = new HashSet<>();
         List<CommunityList> communityLists = new ArrayList<>();
         for (CommunityMember communityMember : community.getMembers()) {
             if (communityMember instanceof LiteralCommunityMember literalCommunityMember) {
-                communities.add(literalCommunityMember.getCommunity().toString());
-                communityLists.add(new NormalCommunityList(communities));
+                normalCommunities.add(literalCommunityMember.getCommunity().toString());
             } else if(communityMember instanceof RegexCommunityMember regexCommunityMember) {
-                communities.add(regexCommunityMember.getRegex());
-                communityLists.add(new RegexCommunityList(communities));
-//                warn("regex community member %s in %s is not supported ", communityMember, community.getName());
+                regexCommunities.add(regexCommunityMember.getJavaRegex());
             }
+        }
+        if (!normalCommunities.isEmpty()) {
+            communityLists.add(new NormalCommunityList(normalCommunities));
+        }
+        if (!regexCommunities.isEmpty()) {
+            communityLists.add(new RegexCommunityList(regexCommunities));
         }
         return communityLists;
     }

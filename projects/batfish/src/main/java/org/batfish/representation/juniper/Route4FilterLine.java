@@ -11,5 +11,9 @@ public abstract class Route4FilterLine extends RouteFilterLine {
     _prefix = prefix;
   }
 
+  public Prefix getPrefix() {
+    return _prefix;
+  }
+
   public abstract void applyTo(RouteFilterList rfl);
 }

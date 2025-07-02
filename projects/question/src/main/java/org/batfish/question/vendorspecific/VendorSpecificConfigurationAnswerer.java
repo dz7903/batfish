@@ -21,7 +21,6 @@ import org.batfish.representation.cisco.CiscoConfiguration;
 import org.batfish.representation.cisco.IpBgpPeerGroup;
 import org.batfish.representation.juniper.BgpGroup;
 import org.batfish.representation.juniper.JuniperConfiguration;
-import org.batfish.representation.juniper.PolicyStatement;
 import org.batfish.representation.juniper.RoutingInstance;
 import org.batfish.representation.juniper.IpBgpGroup;
 import org.batfish.vendor.VendorConfiguration;
@@ -73,10 +72,6 @@ public class VendorSpecificConfigurationAnswerer extends Answerer {
         row.put(COL_AS_NUM, asNum);
 
         Map<String, Policy> routeMaps = new HashMap<>();
-        for (Map.Entry<String, org.batfish.representation.cisco.RouteMap> entry : config.getRouteMaps().entrySet()) {
-            routeMaps.put(entry.getKey(), Convert.convertCiscoPolicy(config, entry.getValue()));
-        }
-
         List<Interface> interfaces = new ArrayList<>();
         for (IpBgpPeerGroup peerGroup : config.getDefaultVrf().getBgpProcess().getIpPeerGroups().values()) {
             long remoteAs = peerGroup.getRemoteAs();
@@ -85,18 +80,22 @@ public class VendorSpecificConfigurationAnswerer extends Answerer {
             PolicySet importPolicies = null;
             if(routeMaps.get(peerGroup.getInboundRouteMap()) != null) {
                 importPolicies = new PolicySet(new ArrayList<>(), new DenyAction());
+                if (routeMaps.get(peerGroup.getInboundRouteMap()) == null) {
+                    routeMaps.put(peerGroup.getInboundRouteMap(), Convert.convertCiscoPolicy(config, config.getRouteMaps().get(peerGroup.getInboundRouteMap())));
+                }
                 importPolicies.policies.add(routeMaps.get(peerGroup.getInboundRouteMap()));
             }
 
             PolicySet exportPolicies = null;
             if(routeMaps.get(peerGroup.getOutboundRouteMap()) != null) {
                 exportPolicies = new PolicySet(new ArrayList<>(), new DenyAction());
+                if (routeMaps.get(peerGroup.getOutboundRouteMap()) == null) {
+                    routeMaps.put(peerGroup.getOutboundRouteMap(), Convert.convertCiscoPolicy(config, config.getRouteMaps().get(peerGroup.getOutboundRouteMap())));
+                }
                 exportPolicies.policies.add(routeMaps.get(peerGroup.getOutboundRouteMap()));
             }
 
-            interfaces.add(new Interface(
-                    null, asNum, remoteIp, remoteAs, asNum == remoteAs,
-                    importPolicies, exportPolicies));
+            interfaces.add(new Interface(null, asNum, remoteIp, remoteAs, asNum == remoteAs, importPolicies, exportPolicies));
         }
         row.put(COL_INTERFACES, interfaces);
 
@@ -108,72 +107,93 @@ public class VendorSpecificConfigurationAnswerer extends Answerer {
         row.put(COL_FILE_NAME, name);
         row.put(COL_CONFIG_FORMAT, "juniper");
 
-        Long asNum = config.getMasterLogicalSystem().getDefaultRoutingInstance().getAs();
+        long asNum = config.getMasterLogicalSystem().getDefaultRoutingInstance().getAs();
+        row.put(COL_AS_NUM, asNum);
 
         Map<String, Policy> routeMaps = new HashMap<>();
-        for (Map.Entry<String, PolicyStatement> entry: config.getMasterLogicalSystem().getPolicyStatements().entrySet()) {
-            routeMaps.put(entry.getKey(), Convert.convertJuniperPolicy(config, entry.getValue()));
-        }
-
         List<Interface> interfaces = new ArrayList<>();
         for (RoutingInstance instance : config.getMasterLogicalSystem().getRoutingInstances().values()) {
-            System.out.println(String.format("%s routing instance %s", name, instance.getName()));
-
             for (IpBgpGroup ig : instance.getIpBgpGroups().values()) {
-                if (asNum == null) {
-                    asNum = ig.getLocalAs();
-                } else if (ig.getLocalAs() != null && !asNum.equals(ig.getLocalAs())) {
-                    warn("multiple local-as %d,%d detected in %s", asNum, ig.getLocalAs(), name);
-                }
+                Long localAs = null, remoteAs = null;
+                Ip localIp = null;
+                PolicySet importPolicies = null, exportPolicies = null;
+                Boolean isInternal = null;
 
-                Ip localIp = ig.getLocalAddress();
-                if (localIp != null) System.out.println(String.format("%s local address %s", name, localIp.toString()));
+                BgpGroup bg = ig;
+                StringBuilder groupName = new StringBuilder().append(ig.getRemoteAddress().getStartIp());
+                while (bg != null) {
+                    if (bg.getGroupName() != null) {
+                        groupName.append(" in ").append(bg.getGroupName());
+                    }
+                    if (localAs == null && bg.getLocalAs() != null) {
+                        localAs = bg.getLocalAs();
+                    }
+                    if (remoteAs == null && bg.getPeerAs() != null) {
+                        remoteAs = bg.getPeerAs();
+                    }
+                    if (localIp == null && bg.getLocalAddress() != null) {
+                        localIp = bg.getLocalAddress();
+                    }
+                    if (isInternal == null && bg.getType() != null) {
+                        isInternal = bg.getType() == BgpGroup.BgpGroupType.INTERNAL;
+                    }
+                    if (importPolicies == null && !bg.getImportPolicies().isEmpty()) {
+                        importPolicies = new PolicySet(new ArrayList<>(), new PermitAction());
+                        for (String importPolicy : bg.getImportPolicies()) {
+                            if (routeMaps.get(importPolicy) == null) {
+                                routeMaps.put(importPolicy, Convert.convertJuniperPolicy(config, config.getMasterLogicalSystem().getPolicyStatements().get(importPolicy)));
+                            }
+                            importPolicies.policies.add(routeMaps.get(importPolicy));
+                        }
+                    }
+                    if (exportPolicies == null && !bg.getExportPolicies().isEmpty()) {
+                        exportPolicies = new PolicySet(new ArrayList<>(), new PermitAction());
+                        for (String exportPolicy : bg.getExportPolicies()) {
+                            if (routeMaps.get(exportPolicy) == null) {
+                                routeMaps.put(exportPolicy, Convert.convertJuniperPolicy(config, config.getMasterLogicalSystem().getPolicyStatements().get(exportPolicy)));
+                            }
+                            exportPolicies.policies.add(routeMaps.get(exportPolicy));
+                        }
+                    }
+                    bg = bg.getParent();
+                }
+                groupName.append(" in ").append(name);
+
                 if (ig.getRemoteAddress().getPrefixLength() != Prefix.MAX_PREFIX_LENGTH) {
-                    warn("prefix for remote address not supported");
+                    throw new IllegalArgumentException("prefix for remote address not supported for group " + groupName);
                 }
                 Ip remoteIp = ig.getRemoteAddress().getStartIp();
 
-                Long localAs = ig.getLocalAs();
-                Long remoteAs = ig.getPeerAs();
-                boolean isInternal = ig.getType() == BgpGroup.BgpGroupType.INTERNAL;
-
-                PolicySet importPolicies = null;
-                BgpGroup bg = ig;
-                while (bg != null && bg.getImportPolicies().isEmpty()) {
-                    bg = bg.getParent();
+                if (isInternal == null) {
+                    isInternal = false;
                 }
-                if (bg != null) {
-                    importPolicies = new PolicySet(new ArrayList<>(), new PermitAction());
-                    for (String importPolicy : bg.getImportPolicies()) {
-                        importPolicies.policies.add(routeMaps.get(importPolicy));
+                if (localAs == null) {
+                    localAs = instance.getAs();
+                }
+                if (localAs == null) {
+                    localAs = instance.getMasterBgpGroup().getLocalAs();
+                }
+                if (localAs == null) {
+                    localAs = asNum;
+                }
+                if (remoteAs == null && isInternal) {
+                    remoteAs = localAs;
+                }
+
+                if (remoteAs == null) {
+                    throw new IllegalArgumentException("remote as not found for group " + groupName);
+                }
+                if (localIp == null) {
+                    if (isInternal) {
+                        throw new IllegalArgumentException("local IP not found for group " + groupName);
+                    } else {
+                        warn("local IP not found for group " + groupName);
                     }
                 }
-
-                PolicySet exportPolicies = null;
-                bg = ig;
-                while (bg != null && bg.getExportPolicies().isEmpty()) {
-                    bg = bg.getParent();
-                }
-                if (bg != null) {
-                    exportPolicies = new PolicySet(new ArrayList<>(), new PermitAction());
-                    for (String exportPolicy : bg.getExportPolicies()) {
-                        exportPolicies.policies.add(routeMaps.get(exportPolicy));
-                    }
-                }
-                interfaces.add(new Interface(
-                        localIp, localAs, remoteIp, remoteAs, isInternal,
-                        importPolicies, exportPolicies));
-            }
-
-            if (!instance.getNamedBgpGroups().isEmpty()) {
-                warn("ignoring named bgp group in routing instance %s inside %s", instance.getName(), name);
+                interfaces.add(new Interface(localIp, localAs, remoteIp, remoteAs, isInternal, importPolicies, exportPolicies));
             }
         }
         row.put(COL_INTERFACES, interfaces);
-        if (asNum == null) {
-            warn("no local-as found in %s", name);
-        }
-        row.put(COL_AS_NUM, asNum);
         return row.build();
     }
 

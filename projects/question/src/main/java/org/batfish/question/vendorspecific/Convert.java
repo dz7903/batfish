@@ -2,6 +2,9 @@ package org.batfish.question.vendorspecific;
 
 import org.batfish.datamodel.LineAction;
 import org.batfish.datamodel.Prefix;
+import org.batfish.datamodel.PrefixRange;
+import org.batfish.datamodel.RoutingProtocol;
+import org.batfish.datamodel.SubRange;
 import org.batfish.datamodel.bgp.community.StandardCommunity;
 import org.batfish.datamodel.routing_policy.expr.LiteralLong;
 import org.batfish.datamodel.routing_policy.expr.LongExpr;
@@ -49,17 +52,31 @@ import org.batfish.representation.juniper.PsFromCommunity;
 import org.batfish.representation.juniper.PsFromPrefixList;
 import org.batfish.representation.juniper.PsFromPrefixListFilterLonger;
 import org.batfish.representation.juniper.PsFromPrefixListFilterOrLonger;
+import org.batfish.representation.juniper.PsFromProtocol;
+import org.batfish.representation.juniper.PsFromRouteFilter;
 import org.batfish.representation.juniper.PsFroms;
 import org.batfish.representation.juniper.PsTerm;
 import org.batfish.representation.juniper.PsThen;
 import org.batfish.representation.juniper.PsThenAccept;
+import org.batfish.representation.juniper.PsThenAsPathPrepend;
 import org.batfish.representation.juniper.PsThenCommunityAdd;
 import org.batfish.representation.juniper.PsThenCommunityDelete;
 import org.batfish.representation.juniper.PsThenCommunitySet;
 import org.batfish.representation.juniper.PsThenLocalPreference;
+import org.batfish.representation.juniper.PsThenMetric;
+import org.batfish.representation.juniper.PsThenNextHopDiscard;
+import org.batfish.representation.juniper.PsThenNextHopIp;
+import org.batfish.representation.juniper.PsThenNextHopSelf;
 import org.batfish.representation.juniper.PsThenNextPolicy;
 import org.batfish.representation.juniper.PsThenReject;
 import org.batfish.representation.juniper.RegexCommunityMember;
+import org.batfish.representation.juniper.Route4FilterLineExact;
+import org.batfish.representation.juniper.Route4FilterLineLengthRange;
+import org.batfish.representation.juniper.Route4FilterLineLonger;
+import org.batfish.representation.juniper.Route4FilterLineOrLonger;
+import org.batfish.representation.juniper.Route4FilterLineUpTo;
+import org.batfish.representation.juniper.RouteFilter;
+import org.batfish.representation.juniper.RouteFilterLine;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -96,9 +113,7 @@ public final class Convert {
             return_list.add(communities);
             return_list.add(return_2);
             return return_list;
-
-        }
-        else {
+        } else {
             for (ExpandedCommunityListLine communityListLine : expandedCommunityList.getLines()) {
                 if (communityListLine.getAction() != LineAction.PERMIT) {
                     throw new IllegalArgumentException("DENY in community list " + communityList.getName() + " is not supported");
@@ -129,10 +144,8 @@ public final class Convert {
                 }
             }
             return new MatchCommunity(communityLists);
-
-        }else if (matchLine instanceof RouteMapMatchIpPrefixListLine line) {
-            Set<Prefix> prefix = new HashSet<>();
-
+        } else if (matchLine instanceof RouteMapMatchIpPrefixListLine line) {
+            Set<PrefixRange> prefixRanges = new HashSet<>();
             for (String listName : line.getListNames()) {
                 org.batfish.representation.cisco.PrefixList prefixList = config.getPrefixLists().get(listName);
                 if (prefixList == null) {
@@ -143,16 +156,10 @@ public final class Convert {
                     if (prefixListLine.getAction() != LineAction.PERMIT) {
                         throw new IllegalArgumentException("DENY in prefix list " + prefixList.getName() + " is not supported");
                     }
-                    if (prefixListLine.getLengthRange().getStart() != prefixListLine.getPrefix().getPrefixLength()
-                            || prefixListLine.getLengthRange().getEnd() != prefixListLine.getPrefix().getPrefixLength()) {
-                        warn("only exact prefix match supported, sub range %s in %s will be ignored",
-                            prefixListLine.getLengthRange(), prefixList.getName());
-                    }
-                    prefix.add(prefixListLine.getPrefix());
+                    prefixRanges.add(new PrefixRange(prefixListLine.getPrefix(), prefixListLine.getLengthRange()));
                 }
             }
-
-            return new MatchPrefix(prefix);
+            return new MatchPrefix(prefixRanges);
         } else {
             throw new IllegalArgumentException("unsupported Cisco match line " + matchLine.getClass());
         }
@@ -249,61 +256,69 @@ public final class Convert {
         return prefixList.getPrefixes();
     }
 
+    private static Set<PrefixRange> convertJuniperRouteFilter(JuniperConfiguration config, String listName) {
+        RouteFilter list = config.getMasterLogicalSystem().getRouteFilters().get(listName);
+        if (list == null) {
+            throw new IllegalArgumentException("Can't find route filter " + listName);
+        }
+        Set<PrefixRange> prefixRanges = new HashSet<>();
+        for (RouteFilterLine line : list.getLines()) {
+            if (line instanceof Route4FilterLineExact line1) {
+                prefixRanges.add(PrefixRange.fromPrefix(line1.getPrefix()));
+            } else if (line instanceof Route4FilterLineLonger line1) {
+                prefixRanges.add(PrefixRange.moreSpecificThan(line1.getPrefix()));
+            } else if (line instanceof Route4FilterLineOrLonger line1) {
+                prefixRanges.add(PrefixRange.sameAsOrMoreSpecificThan(line1.getPrefix()));
+            } else if (line instanceof Route4FilterLineLengthRange line1) {
+                prefixRanges.add(new PrefixRange(line1.getPrefix(), new SubRange(line1.getMinPrefixLength(), line1.getMaxPrefixLength())));
+            } else if (line instanceof Route4FilterLineUpTo line1) {
+                prefixRanges.add(new PrefixRange(line1.getPrefix(), new SubRange(line1.getPrefix().getPrefixLength(), line1.getMaxPrefixLength())));
+            } else {
+                throw new IllegalArgumentException("unsupported route filter " + line.getClass());
+            }
+        }
+        return prefixRanges;
+    }
+
     public static List<Match> convertJuniperMatch(JuniperConfiguration config, PsFroms froms) {
         List<Match> matchList = new ArrayList<>();
         for (PsFromCommunity fromCommunity : froms.getFromCommunities()) {
             List<CommunityList> tags = convertJuniperCommunity(config, fromCommunity.getName());
             matchList.add(new MatchCommunity(tags));
         }
-
         for (PsFromPrefixList fromPrefixList : froms.getFromPrefixLists()) {
             Set<Prefix> prefixes = convertJuniperPrefixList(config, fromPrefixList.getName());
-            matchList.add(new MatchPrefix(prefixes));
+            matchList.add(new MatchPrefix(prefixes.stream().map(PrefixRange::fromPrefix).collect(Collectors.toSet())));
         }
-
-        if (!froms.getFromPrefixListFilterLongers().isEmpty() || !froms.getFromPrefixListFilterOrLongers().isEmpty()) {
-            for (PsFromPrefixListFilterLonger fromPrefixList : froms.getFromPrefixListFilterLongers()) {
-                Set<Prefix> prefixes = convertJuniperPrefixList(config, fromPrefixList.getPrefixList());
-                matchList.add(new MatchPrefix(prefixes));
-            }
-            for (PsFromPrefixListFilterOrLonger fromPrefixList : froms.getFromPrefixListFilterOrLongers()) {
-                Set<Prefix> prefixes = convertJuniperPrefixList(config, fromPrefixList.getPrefixList());
-                matchList.add(new MatchPrefix(prefixes));
-            }
-            warn("longer/orlonger in from prefix list filter will be ignored");
+        for (PsFromPrefixListFilterLonger fromPrefixList : froms.getFromPrefixListFilterLongers()) {
+            Set<Prefix> prefixes = convertJuniperPrefixList(config, fromPrefixList.getPrefixList());
+            matchList.add(new MatchPrefix(prefixes.stream().map(PrefixRange::moreSpecificThan).collect(Collectors.toSet())));
         }
-
-        if (!froms.getFromRouteFilters().isEmpty()) {
-            matchList.add(new MatchNothing());
-            warn("from route filter will be ignored");
+        for (PsFromPrefixListFilterOrLonger fromPrefixList : froms.getFromPrefixListFilterOrLongers()) {
+            Set<Prefix> prefixes = convertJuniperPrefixList(config, fromPrefixList.getPrefixList());
+            matchList.add(new MatchPrefix(prefixes.stream().map(PrefixRange::sameAsOrMoreSpecificThan).collect(Collectors.toSet())));
         }
-        if (!froms.getFromProtocols().isEmpty()) {
-            matchList.add(new MatchNothing());
-            warn("from protocol will be ignored");
+        for (PsFromRouteFilter fromRouteFilter : froms.getFromRouteFilters()) {
+            Set<PrefixRange> prefixRanges = convertJuniperRouteFilter(config, fromRouteFilter.getRouteFilterName());
+            matchList.add(new MatchPrefix(prefixRanges));
+        }
+        for (PsFromProtocol fromProtocol : froms.getFromProtocols()) {
+            if (fromProtocol.getProtocol() != RoutingProtocol.BGP)
+                matchList.add(new MatchNothing());
         }
         if (froms.getFromFamily() != null) {
-            matchList.add(new MatchNothing());
             warn("from family will be ignored");
         }
         if (!froms.getFromAsPaths().isEmpty()) {
             matchList.add(new MatchNothing());
-            warn("from as path will be ignored");
+            warn("from as-path will be ignored");
         }
-        if (!froms.getFromInterfaces().isEmpty()) {
-            matchList.add(new MatchNothing());
-            warn("from interface will be ignored");
-        }
-        if (!froms.getFromTags().isEmpty()) {
-            matchList.add(new MatchNothing());
-            warn("from tags will be ignored");
-        }
-
-        if (!froms.getFromAsPathGroups().isEmpty() || froms.getFromColor() != null || froms.getFromCommunityCount() != null
+        if (!froms.getFromInterfaces().isEmpty() || !froms.getFromTags().isEmpty()
+                || !froms.getFromAsPathGroups().isEmpty() || froms.getFromColor() != null || froms.getFromCommunityCount() != null
                 || !froms.getFromConditions().isEmpty() || froms.getFromInstance() != null || froms.getFromLocalPreference() != null
                 || froms.getFromMetric() != null || !froms.getFromPolicyStatements().isEmpty() || !froms.getFromPolicyStatementConjunctions().isEmpty()) {
-            throw new IllegalArgumentException("unsupported clauses in from");
+            throw new IllegalArgumentException("unsupported Juniper from");
         }
-
         return matchList;
     }
 
@@ -319,13 +334,23 @@ public final class Convert {
             return new DeleteCommunity(communities);
         } else if (psThen instanceof PsThenLocalPreference then) {
             return new SetLocalPreference(then.getLocalPreference());
-//        } else if (psThen instanceof PsThenNextHopIp then) {
-//            LOGGER.warn("then next hop ip is not supported and will be ignored");
-//            return Optional.empty();
-        } else {
-            warn("%s is not supported and will be ignored", psThen.getClass());
-//            throw new IllegalArgumentException("unsupported Juniper then " + psThen.getClass());
+        } else if (psThen instanceof PsThenNextHopIp then) {
+            warn("then next-hop ip is not supported and will be ignored");
             return null;
+        } else if (psThen instanceof PsThenNextHopSelf then) {
+            warn("then next-hop self is not supported and will be ignored");
+            return null;
+        } else if (psThen instanceof PsThenNextHopDiscard then) {
+            warn("then next-hop discard is not supported and will be ignored");
+            return null;
+        } else if (psThen instanceof PsThenAsPathPrepend then) {
+            warn("then as-path-prepend is not supported and will be ignored");
+            return null;
+        } else if (psThen instanceof PsThenMetric then) {
+            warn("then metric is not supported and will be ignored");
+            return null;
+        } else {
+            throw new IllegalArgumentException("unsupported Juniper then " + psThen.getClass());
         }
     }
 
@@ -336,14 +361,14 @@ public final class Convert {
         for (PsThen then: term.getThens().getAllThens()) {
             if(then instanceof PsThenAccept) {
                 action = new PermitAction();
-            }
-            else if(then instanceof PsThenReject) {
+                break;
+            } else if(then instanceof PsThenReject) {
                 action = new DenyAction();
-            }
-            else if(then instanceof PsThenNextPolicy){
+                break;
+            } else if(then instanceof PsThenNextPolicy){
                 action = new NextPolicyAction();
-            }
-            else{
+                break;
+            } else{
                 Setter setter = convertJuniperSetter(config, then);
                 if (setter != null) {
                     setterList.add(setter);

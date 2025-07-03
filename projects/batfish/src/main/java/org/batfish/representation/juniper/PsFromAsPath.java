@@ -17,6 +17,10 @@ public final class PsFromAsPath extends PsFrom {
     _asPathName = asPathName;
   }
 
+  public String getAsPathName() {
+    return _asPathName;
+  }
+
   @Override
   public BooleanExpr toBooleanExpr(JuniperConfiguration jc, Configuration c, Warnings warnings) {
     Map<String, AsPath> asPaths = jc.getMasterLogicalSystem().getAsPaths();

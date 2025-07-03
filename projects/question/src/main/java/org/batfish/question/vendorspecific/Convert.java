@@ -15,6 +15,7 @@ import org.batfish.question.vendorspecific.ir.CommunityList;
 import org.batfish.question.vendorspecific.ir.DeleteCommunity;
 import org.batfish.question.vendorspecific.ir.DenyAction;
 import org.batfish.question.vendorspecific.ir.Match;
+import org.batfish.question.vendorspecific.ir.MatchAsPath;
 import org.batfish.question.vendorspecific.ir.MatchCommunity;
 import org.batfish.question.vendorspecific.ir.MatchNothing;
 import org.batfish.question.vendorspecific.ir.MatchPrefix;
@@ -22,6 +23,7 @@ import org.batfish.question.vendorspecific.ir.NextClauseAction;
 import org.batfish.question.vendorspecific.ir.NextPolicyAction;
 import org.batfish.question.vendorspecific.ir.NormalCommunityList;
 import org.batfish.question.vendorspecific.ir.PermitAction;
+import org.batfish.question.vendorspecific.ir.RegexAsPath;
 import org.batfish.question.vendorspecific.ir.RegexCommunityList;
 import org.batfish.question.vendorspecific.ir.Policy;
 import org.batfish.question.vendorspecific.ir.SetCommunity;
@@ -45,9 +47,11 @@ import org.batfish.representation.cisco.StandardCommunityListLine;
 import org.batfish.representation.juniper.CommunityMember;
 import org.batfish.representation.juniper.JuniperConfiguration;
 import org.batfish.representation.juniper.LiteralCommunityMember;
+import org.batfish.representation.juniper.AsPath;
 import org.batfish.representation.juniper.NamedCommunity;
 import org.batfish.representation.juniper.PolicyStatement;
 import org.batfish.representation.juniper.PrefixList;
+import org.batfish.representation.juniper.PsFromAsPath;
 import org.batfish.representation.juniper.PsFromCommunity;
 import org.batfish.representation.juniper.PsFromPrefixList;
 import org.batfish.representation.juniper.PsFromPrefixListFilterLonger;
@@ -280,6 +284,13 @@ public final class Convert {
         return prefixRanges;
     }
 
+    public static Set<String> convertJuniperAsPath(JuniperConfiguration config, String name){
+        AsPath asPath = config.getMasterLogicalSystem().getAsPaths().get(name);
+        Set<String> asPaths = new HashSet<>();
+        asPaths.add(asPath.getRegex());
+        return asPaths;
+    }
+
     public static List<Match> convertJuniperMatch(JuniperConfiguration config, PsFroms froms) {
         List<Match> matchList = new ArrayList<>();
         for (PsFromCommunity fromCommunity : froms.getFromCommunities()) {
@@ -306,12 +317,12 @@ public final class Convert {
             if (fromProtocol.getProtocol() != RoutingProtocol.BGP)
                 matchList.add(new MatchNothing());
         }
+        for (PsFromAsPath fromAsPath : froms.getFromAsPaths()) {
+            Set<String> tags = convertJuniperAsPath(config, fromAsPath.getAsPathName());
+            matchList.add(new MatchAsPath(new RegexAsPath(tags)));
+        }
         if (froms.getFromFamily() != null) {
             warn("from family will be ignored");
-        }
-        if (!froms.getFromAsPaths().isEmpty()) {
-            matchList.add(new MatchNothing());
-            warn("from as-path will be ignored");
         }
         if (!froms.getFromInterfaces().isEmpty() || !froms.getFromTags().isEmpty()
                 || !froms.getFromAsPathGroups().isEmpty() || froms.getFromColor() != null || froms.getFromCommunityCount() != null

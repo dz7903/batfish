@@ -112,87 +112,89 @@ public class VendorSpecificConfigurationAnswerer extends Answerer {
 
         Map<String, Policy> routeMaps = new HashMap<>();
         List<Interface> interfaces = new ArrayList<>();
-        for (RoutingInstance instance : config.getMasterLogicalSystem().getRoutingInstances().values()) {
-            for (IpBgpGroup ig : instance.getIpBgpGroups().values()) {
-                Long localAs = null, remoteAs = null;
-                Ip localIp = null;
-                PolicySet importPolicies = null, exportPolicies = null;
-                Boolean isInternal = null;
+        RoutingInstance instance = config.getMasterLogicalSystem().getDefaultRoutingInstance();
+//      Bagpipe and Timepiece only verify the default VRF, so we also skip non-default VRFs here
+//        for (RoutingInstance instance : config.getMasterLogicalSystem().getRoutingInstances().values()) {
+        for (IpBgpGroup ig : instance.getIpBgpGroups().values()) {
+            Long localAs = null, remoteAs = null;
+            Ip localIp = null;
+            PolicySet importPolicies = null, exportPolicies = null;
+            Boolean isInternal = null;
 
-                BgpGroup bg = ig;
-                StringBuilder groupName = new StringBuilder().append(ig.getRemoteAddress().getStartIp());
-                while (bg != null) {
-                    if (bg.getGroupName() != null) {
-                        groupName.append(" in ").append(bg.getGroupName());
-                    }
-                    if (localAs == null && bg.getLocalAs() != null) {
-                        localAs = bg.getLocalAs();
-                    }
-                    if (remoteAs == null && bg.getPeerAs() != null) {
-                        remoteAs = bg.getPeerAs();
-                    }
-                    if (localIp == null && bg.getLocalAddress() != null) {
-                        localIp = bg.getLocalAddress();
-                    }
-                    if (isInternal == null && bg.getType() != null) {
-                        isInternal = bg.getType() == BgpGroup.BgpGroupType.INTERNAL;
-                    }
-                    if (importPolicies == null && !bg.getImportPolicies().isEmpty()) {
-                        importPolicies = new PolicySet(new ArrayList<>(), new PermitAction());
-                        for (String importPolicy : bg.getImportPolicies()) {
-                            if (routeMaps.get(importPolicy) == null) {
-                                routeMaps.put(importPolicy, Convert.convertJuniperPolicy(config, config.getMasterLogicalSystem().getPolicyStatements().get(importPolicy)));
-                            }
-                            importPolicies.policies.add(routeMaps.get(importPolicy));
+            BgpGroup bg = ig;
+            StringBuilder groupName = new StringBuilder().append(ig.getRemoteAddress().getStartIp());
+            while (bg != null) {
+                if (bg.getGroupName() != null) {
+                    groupName.append(" in ").append(bg.getGroupName());
+                }
+                if (localAs == null && bg.getLocalAs() != null) {
+                    localAs = bg.getLocalAs();
+                }
+                if (remoteAs == null && bg.getPeerAs() != null) {
+                    remoteAs = bg.getPeerAs();
+                }
+                if (localIp == null && bg.getLocalAddress() != null) {
+                    localIp = bg.getLocalAddress();
+                }
+                if (isInternal == null && bg.getType() != null) {
+                    isInternal = bg.getType() == BgpGroup.BgpGroupType.INTERNAL;
+                }
+                if (importPolicies == null && !bg.getImportPolicies().isEmpty()) {
+                    importPolicies = new PolicySet(new ArrayList<>(), new PermitAction());
+                    for (String importPolicy : bg.getImportPolicies()) {
+                        if (routeMaps.get(importPolicy) == null) {
+                            routeMaps.put(importPolicy, Convert.convertJuniperPolicy(config, config.getMasterLogicalSystem().getPolicyStatements().get(importPolicy)));
                         }
+                        importPolicies.policies.add(routeMaps.get(importPolicy));
                     }
-                    if (exportPolicies == null && !bg.getExportPolicies().isEmpty()) {
-                        exportPolicies = new PolicySet(new ArrayList<>(), new PermitAction());
-                        for (String exportPolicy : bg.getExportPolicies()) {
-                            if (routeMaps.get(exportPolicy) == null) {
-                                routeMaps.put(exportPolicy, Convert.convertJuniperPolicy(config, config.getMasterLogicalSystem().getPolicyStatements().get(exportPolicy)));
-                            }
-                            exportPolicies.policies.add(routeMaps.get(exportPolicy));
+                }
+                if (exportPolicies == null && !bg.getExportPolicies().isEmpty()) {
+                    exportPolicies = new PolicySet(new ArrayList<>(), new PermitAction());
+                    for (String exportPolicy : bg.getExportPolicies()) {
+                        if (routeMaps.get(exportPolicy) == null) {
+                            routeMaps.put(exportPolicy, Convert.convertJuniperPolicy(config, config.getMasterLogicalSystem().getPolicyStatements().get(exportPolicy)));
                         }
-                    }
-                    bg = bg.getParent();
-                }
-                groupName.append(" in ").append(name);
-
-                if (ig.getRemoteAddress().getPrefixLength() != Prefix.MAX_PREFIX_LENGTH) {
-                    throw new IllegalArgumentException("prefix for remote address not supported for group " + groupName);
-                }
-                Ip remoteIp = ig.getRemoteAddress().getStartIp();
-
-                if (isInternal == null) {
-                    isInternal = false;
-                }
-                if (localAs == null) {
-                    localAs = instance.getAs();
-                }
-                if (localAs == null) {
-                    localAs = instance.getMasterBgpGroup().getLocalAs();
-                }
-                if (localAs == null) {
-                    localAs = asNum;
-                }
-                if (remoteAs == null && isInternal) {
-                    remoteAs = localAs;
-                }
-
-                if (remoteAs == null) {
-                    throw new IllegalArgumentException("remote as not found for group " + groupName);
-                }
-                if (localIp == null) {
-                    if (isInternal) {
-                        throw new IllegalArgumentException("local IP not found for group " + groupName);
-                    } else {
-                        warn("local IP not found for group " + groupName);
+                        exportPolicies.policies.add(routeMaps.get(exportPolicy));
                     }
                 }
-                interfaces.add(new Interface(localIp, localAs, remoteIp, remoteAs, isInternal, importPolicies, exportPolicies));
+                bg = bg.getParent();
             }
+            groupName.append(" in ").append(name);
+
+            if (ig.getRemoteAddress().getPrefixLength() != Prefix.MAX_PREFIX_LENGTH) {
+                throw new IllegalArgumentException("prefix for remote address not supported for group " + groupName);
+            }
+            Ip remoteIp = ig.getRemoteAddress().getStartIp();
+
+            if (isInternal == null) {
+                isInternal = false;
+            }
+            if (localAs == null) {
+                localAs = instance.getAs();
+            }
+            if (localAs == null) {
+                localAs = instance.getMasterBgpGroup().getLocalAs();
+            }
+            if (localAs == null) {
+                localAs = asNum;
+            }
+            if (remoteAs == null && isInternal) {
+                remoteAs = localAs;
+            }
+
+            if (remoteAs == null) {
+                throw new IllegalArgumentException("remote as not found for group " + groupName);
+            }
+            if (localIp == null) {
+                if (isInternal) {
+                    throw new IllegalArgumentException("local IP not found for group " + groupName);
+                } else {
+                    warn("local IP not found for group " + groupName);
+                }
+            }
+            interfaces.add(new Interface(localIp, localAs, remoteIp, remoteAs, isInternal, importPolicies, exportPolicies));
         }
+//        }
         row.put(COL_INTERFACES, interfaces);
         return row.build();
     }
@@ -209,11 +211,9 @@ public class VendorSpecificConfigurationAnswerer extends Answerer {
             (name, config) -> {
                 if (!includeStructureNames.matcher(name).matches()) { return; }
 
-                if (config instanceof CiscoConfiguration) {
-                    CiscoConfiguration ciscoConfig = (CiscoConfiguration) config;
+                if (config instanceof CiscoConfiguration ciscoConfig) {
                     rows.add(processCisco(name, ciscoConfig));
-                } else if (config instanceof JuniperConfiguration) {
-                    JuniperConfiguration juniperConfig = (JuniperConfiguration) config;
+                } else if (config instanceof JuniperConfiguration juniperConfig) {
                     rows.add(processJuniper(name, juniperConfig));
                 } else {
                     warn("Skipping %s because it is not a cisco or juniper configuration", name);

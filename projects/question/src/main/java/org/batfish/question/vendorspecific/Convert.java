@@ -1,17 +1,23 @@
 package org.batfish.question.vendorspecific;
 
+import com.google.common.collect.Range;
 import org.batfish.datamodel.LineAction;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.SubRange;
 import org.batfish.datamodel.bgp.community.StandardCommunity;
+import org.batfish.datamodel.routing_policy.as_path.AsPathMatchAny;
+import org.batfish.datamodel.routing_policy.as_path.AsPathMatchExpr;
+import org.batfish.datamodel.routing_policy.as_path.AsSetsMatchingRanges;
 import org.batfish.datamodel.routing_policy.expr.LiteralLong;
 import org.batfish.datamodel.routing_policy.expr.LongExpr;
 import org.batfish.question.vendorspecific.ir.Action;
 import org.batfish.question.vendorspecific.ir.AddCommunity;
 import org.batfish.question.vendorspecific.ir.Clause;
 import org.batfish.question.vendorspecific.ir.CommunityList;
+import org.batfish.question.vendorspecific.ir.ContainsAnyAsnAsPath;
+import org.batfish.question.vendorspecific.ir.ContainsAsnRangeAsPath;
 import org.batfish.question.vendorspecific.ir.DeleteCommunity;
 import org.batfish.question.vendorspecific.ir.DenyAction;
 import org.batfish.question.vendorspecific.ir.Match;
@@ -19,16 +25,18 @@ import org.batfish.question.vendorspecific.ir.MatchAsPath;
 import org.batfish.question.vendorspecific.ir.MatchCommunity;
 import org.batfish.question.vendorspecific.ir.MatchNothing;
 import org.batfish.question.vendorspecific.ir.MatchPrefix;
+import org.batfish.question.vendorspecific.ir.MyAsPath;
 import org.batfish.question.vendorspecific.ir.NextClauseAction;
 import org.batfish.question.vendorspecific.ir.NextPolicyAction;
 import org.batfish.question.vendorspecific.ir.NormalCommunityList;
 import org.batfish.question.vendorspecific.ir.PermitAction;
-import org.batfish.question.vendorspecific.ir.RegexAsPath;
+import org.batfish.question.vendorspecific.ir.ContainsAsnAsPath;
 import org.batfish.question.vendorspecific.ir.RegexCommunityList;
 import org.batfish.question.vendorspecific.ir.Policy;
 import org.batfish.question.vendorspecific.ir.SetCommunity;
 import org.batfish.question.vendorspecific.ir.SetLocalPreference;
 import org.batfish.question.vendorspecific.ir.Setter;
+import org.batfish.question.vendorspecific.ir.StartsWithAsnAsPath;
 import org.batfish.representation.cisco.CiscoConfiguration;
 import org.batfish.representation.cisco.ExpandedCommunityList;
 import org.batfish.representation.cisco.ExpandedCommunityListLine;
@@ -44,6 +52,7 @@ import org.batfish.representation.cisco.RouteMapSetLine;
 import org.batfish.representation.cisco.RouteMapSetLocalPreferenceLine;
 import org.batfish.representation.cisco.StandardCommunityList;
 import org.batfish.representation.cisco.StandardCommunityListLine;
+import org.batfish.representation.juniper.AsPathMatchExprParser;
 import org.batfish.representation.juniper.CommunityMember;
 import org.batfish.representation.juniper.JuniperConfiguration;
 import org.batfish.representation.juniper.LiteralCommunityMember;
@@ -284,11 +293,32 @@ public final class Convert {
         return prefixRanges;
     }
 
-    public static Set<String> convertJuniperAsPath(JuniperConfiguration config, String name){
+    public static MyAsPath convertJuniperAsPath(JuniperConfiguration config, String name){
         AsPath asPath = config.getMasterLogicalSystem().getAsPaths().get(name);
-        Set<String> asPaths = new HashSet<>();
-        asPaths.add(asPath.getRegex());
-        return asPaths;
+        AsPathMatchExpr matchExpr = AsPathMatchExprParser.convertToAsPathMatchExpr(asPath.getRegex());
+        if (matchExpr instanceof AsSetsMatchingRanges){
+            if (!((AsSetsMatchingRanges) matchExpr).getAnchorEnd() && !((AsSetsMatchingRanges) matchExpr).getAnchorStart()){
+                if (((AsSetsMatchingRanges) matchExpr).getAsRanges().get(0).lowerEndpoint().equals(((AsSetsMatchingRanges) matchExpr).getAsRanges().get(0).upperEndpoint())){
+                    return new ContainsAsnAsPath(((AsSetsMatchingRanges) matchExpr).getAsRanges());
+                }
+                else{
+                    return new ContainsAsnRangeAsPath(((AsSetsMatchingRanges) matchExpr).getAsRanges());
+                }
+            }
+            else if(!((AsSetsMatchingRanges) matchExpr).getAnchorEnd()){
+                return new StartsWithAsnAsPath(((AsSetsMatchingRanges) matchExpr).getAsRanges());
+            }
+        }
+        else if(matchExpr instanceof AsPathMatchAny){
+            List<List<Range<Long>>> asnRanges = new ArrayList<>();
+            for (AsPathMatchExpr expr : ((AsPathMatchAny) matchExpr).getDisjuncts()){
+                if (expr instanceof AsSetsMatchingRanges){
+                    asnRanges.add(((AsSetsMatchingRanges) expr).getAsRanges());
+                }
+            }
+            return new ContainsAnyAsnAsPath(asnRanges);
+        }
+        return null;
     }
 
     public static List<Match> convertJuniperMatch(JuniperConfiguration config, PsFroms froms) {
@@ -318,8 +348,13 @@ public final class Convert {
                 matchList.add(new MatchNothing());
         }
         for (PsFromAsPath fromAsPath : froms.getFromAsPaths()) {
-            Set<String> tags = convertJuniperAsPath(config, fromAsPath.getAsPathName());
-            matchList.add(new MatchAsPath(new RegexAsPath(tags)));
+            MyAsPath path = convertJuniperAsPath(config, fromAsPath.getAsPathName());
+            if (path != null){
+                matchList.add(new MatchAsPath(path));
+            }
+            else{
+                warn("unsupported AsPath");
+            }
         }
         if (froms.getFromFamily() != null) {
             warn("from family will be ignored");

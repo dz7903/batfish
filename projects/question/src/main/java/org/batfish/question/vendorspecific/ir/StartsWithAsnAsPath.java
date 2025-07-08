@@ -1,0 +1,15 @@
+package org.batfish.question.vendorspecific.ir;
+
+import com.google.common.collect.Range;
+
+import java.io.Serializable;
+import java.util.List;
+
+public class StartsWithAsnAsPath extends MyAsPath implements Serializable {
+    public final String type = "starts_with_asn_as_path";
+    public final List<Range<Long>> ranges;
+
+    public StartsWithAsnAsPath(List<Range<Long>> ranges) {
+        this.ranges = ranges;
+    }
+}

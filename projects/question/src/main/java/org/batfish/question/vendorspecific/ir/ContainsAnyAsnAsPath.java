@@ -7,9 +7,9 @@ import java.util.List;
 
 public class ContainsAnyAsnAsPath extends MyAsPath implements Serializable {
     public final String type = "contains_any_asn_as_path";
-    public final List<List<Range<Long>>>  ranges;
+    public final List<Range<Long>>  ranges;
 
-    public ContainsAnyAsnAsPath(List<List<Range<Long>>> ranges) {
+    public ContainsAnyAsnAsPath(List<Range<Long>> ranges) {
         this.ranges = ranges;
     }
 }

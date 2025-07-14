@@ -310,10 +310,10 @@ public final class Convert {
             }
         }
         else if(matchExpr instanceof AsPathMatchAny){
-            List<List<Range<Long>>> asnRanges = new ArrayList<>();
+            List<Range<Long>> asnRanges = new ArrayList<>();
             for (AsPathMatchExpr expr : ((AsPathMatchAny) matchExpr).getDisjuncts()){
                 if (expr instanceof AsSetsMatchingRanges){
-                    asnRanges.add(((AsSetsMatchingRanges) expr).getAsRanges());
+                    asnRanges.addAll(((AsSetsMatchingRanges) expr).getAsRanges());
                 }
             }
             return new ContainsAnyAsnAsPath(asnRanges);

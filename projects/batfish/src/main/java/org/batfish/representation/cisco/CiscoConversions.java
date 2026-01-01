@@ -568,7 +568,7 @@ public class CiscoConversions {
     return new CommunitySetAclLine(line.getAction(), toMatchExpr(toJavaRegex(line.getRegex())));
   }
 
-  static String toJavaRegex(String ciscoRegex) {
+  public static String toJavaRegex(String ciscoRegex) {
     String withoutQuotes;
     if (ciscoRegex.charAt(0) == '"' && ciscoRegex.charAt(ciscoRegex.length() - 1) == '"') {
       withoutQuotes = ciscoRegex.substring(1, ciscoRegex.length() - 1);

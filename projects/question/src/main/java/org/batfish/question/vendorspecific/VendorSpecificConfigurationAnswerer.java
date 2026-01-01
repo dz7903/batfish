@@ -17,6 +17,8 @@ import org.batfish.question.vendorspecific.ir.Interface;
 import org.batfish.question.vendorspecific.ir.PermitAction;
 import org.batfish.question.vendorspecific.ir.Policy;
 import org.batfish.question.vendorspecific.ir.PolicySet;
+import org.batfish.representation.cisco.BgpPeerGroup;
+import org.batfish.representation.cisco.BgpProcess;
 import org.batfish.representation.cisco.CiscoConfiguration;
 import org.batfish.representation.cisco.IpBgpPeerGroup;
 import org.batfish.representation.juniper.BgpGroup;
@@ -68,34 +70,68 @@ public class VendorSpecificConfigurationAnswerer extends Answerer {
         row.put(COL_FILE_NAME, name);
         row.put(COL_CONFIG_FORMAT, "cisco");
 
-        long asNum = config.getDefaultVrf().getBgpProcess().getProcnum();
+        BgpProcess process = config.getDefaultVrf().getBgpProcess();
+        if (process == null)
+            throw new IllegalArgumentException("default VRF not found");
+
+        long asNum = process.getProcnum();
         row.put(COL_AS_NUM, asNum);
+        Ip routerId = process.getRouterId();
 
         Map<String, Policy> routeMaps = new HashMap<>();
         List<Interface> interfaces = new ArrayList<>();
-        for (IpBgpPeerGroup peerGroup : config.getDefaultVrf().getBgpProcess().getIpPeerGroups().values()) {
-            long remoteAs = peerGroup.getRemoteAs();
-            Ip remoteIp = peerGroup.getIp();
-
-            PolicySet importPolicies = null;
-            if(routeMaps.get(peerGroup.getInboundRouteMap()) != null) {
-                importPolicies = new PolicySet(new ArrayList<>(), new DenyAction());
-                if (routeMaps.get(peerGroup.getInboundRouteMap()) == null) {
-                    routeMaps.put(peerGroup.getInboundRouteMap(), Convert.convertCiscoPolicy(config, config.getRouteMaps().get(peerGroup.getInboundRouteMap())));
+        for (IpBgpPeerGroup ipPeerGroup : process.getIpPeerGroups().values()) {
+//            if (name.equals("as2dist2"))
+//                System.out.println("ip peer group " + ipPeerGroup.getName());
+            BgpPeerGroup peerGroup = ipPeerGroup;
+            Long localAs = null, remoteAs = null;
+            PolicySet importPolicies = null, exportPolicies = null;
+            while (peerGroup != null) {
+                if (localAs == null)
+                    localAs = peerGroup.getLocalAs();
+                if (remoteAs == null)
+                    remoteAs = peerGroup.getRemoteAs();
+                if (importPolicies == null) {
+                    if(peerGroup.getInboundRouteMap() != null) {
+                        importPolicies = new PolicySet(new ArrayList<>(), new DenyAction());
+                        if (routeMaps.get(peerGroup.getInboundRouteMap()) == null) {
+                            routeMaps.put(peerGroup.getInboundRouteMap(), Convert.convertCiscoPolicy(config, config.getRouteMaps().get(peerGroup.getInboundRouteMap())));
+                        }
+                        importPolicies.policies.add(routeMaps.get(peerGroup.getInboundRouteMap()));
+                    }
                 }
-                importPolicies.policies.add(routeMaps.get(peerGroup.getInboundRouteMap()));
+                if (exportPolicies == null) {
+                    if(peerGroup.getOutboundRouteMap() != null) {
+                        exportPolicies = new PolicySet(new ArrayList<>(), new DenyAction());
+                        if (routeMaps.get(peerGroup.getOutboundRouteMap()) == null) {
+                            routeMaps.put(peerGroup.getOutboundRouteMap(), Convert.convertCiscoPolicy(config, config.getRouteMaps().get(peerGroup.getOutboundRouteMap())));
+                        }
+                        exportPolicies.policies.add(routeMaps.get(peerGroup.getOutboundRouteMap()));
+                    }
+                }
+                peerGroup = process.getNamedPeerGroups().get(peerGroup.getGroupName());
+            }
+            if (localAs == null) localAs = asNum;
+            if (remoteAs == null) {
+                warn("unknown remote as for " + ipPeerGroup.getGroupName() + " " + ipPeerGroup.getName() + ", will use local as");
+                remoteAs = asNum;
             }
 
-            PolicySet exportPolicies = null;
-            if(routeMaps.get(peerGroup.getOutboundRouteMap()) != null) {
-                exportPolicies = new PolicySet(new ArrayList<>(), new DenyAction());
-                if (routeMaps.get(peerGroup.getOutboundRouteMap()) == null) {
-                    routeMaps.put(peerGroup.getOutboundRouteMap(), Convert.convertCiscoPolicy(config, config.getRouteMaps().get(peerGroup.getOutboundRouteMap())));
-                }
-                exportPolicies.policies.add(routeMaps.get(peerGroup.getOutboundRouteMap()));
-            }
+            Ip remoteIp = ipPeerGroup.getIp();
+            Ip localIp = null;
 
-            interfaces.add(new Interface(null, asNum, remoteIp, remoteAs, asNum == remoteAs, importPolicies, exportPolicies));
+            for (var interf : config.getInterfaces().keySet()) {
+                var addr = config.getInterfaces().get(interf).getAddress();
+                if (addr == null) continue;
+                if (addr.getPrefix().containsIp(remoteIp)) {
+                    if (localIp != null)
+                        warn("multiple possible remote IP: " + localIp + " and " + addr.getIp() + " in " + name);
+                    localIp = addr.getIp();
+                }
+            }
+            if (localIp == null) localIp = routerId;
+
+            interfaces.add(new Interface(localIp, localAs, remoteIp, remoteAs, asNum == remoteAs, importPolicies, exportPolicies));
         }
         row.put(COL_INTERFACES, interfaces);
 

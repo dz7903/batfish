@@ -1,8 +1,14 @@
 package org.batfish.question.vendorspecific;
 
 import com.google.common.collect.Range;
+import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.IpIpSpace;
+import org.batfish.datamodel.IpSpace;
+import org.batfish.datamodel.IpWildcard;
+import org.batfish.datamodel.IpWildcardIpSpace;
 import org.batfish.datamodel.LineAction;
 import org.batfish.datamodel.Prefix;
+import org.batfish.datamodel.PrefixIpSpace;
 import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.SubRange;
@@ -38,11 +44,14 @@ import org.batfish.question.vendorspecific.ir.SetLocalPreference;
 import org.batfish.question.vendorspecific.ir.Setter;
 import org.batfish.question.vendorspecific.ir.StartsWithAsnAsPath;
 import org.batfish.representation.cisco.CiscoConfiguration;
+import org.batfish.representation.cisco.CiscoConversions;
 import org.batfish.representation.cisco.ExpandedCommunityList;
 import org.batfish.representation.cisco.ExpandedCommunityListLine;
+import org.batfish.representation.cisco.ExtendedAccessListLine;
 import org.batfish.representation.cisco.PrefixListLine;
 import org.batfish.representation.cisco.RouteMapClause;
 import org.batfish.representation.cisco.RouteMapMatchCommunityListLine;
+import org.batfish.representation.cisco.RouteMapMatchIpAccessListLine;
 import org.batfish.representation.cisco.RouteMapMatchIpPrefixListLine;
 import org.batfish.representation.cisco.RouteMapMatchLine;
 import org.batfish.representation.cisco.RouteMapSetAdditiveCommunityLine;
@@ -50,8 +59,11 @@ import org.batfish.representation.cisco.RouteMapSetCommunityLine;
 import org.batfish.representation.cisco.RouteMapSetDeleteCommunityLine;
 import org.batfish.representation.cisco.RouteMapSetLine;
 import org.batfish.representation.cisco.RouteMapSetLocalPreferenceLine;
+import org.batfish.representation.cisco.RouteMapSetMetricLine;
+import org.batfish.representation.cisco.StandardAccessListLine;
 import org.batfish.representation.cisco.StandardCommunityList;
 import org.batfish.representation.cisco.StandardCommunityListLine;
+import org.batfish.representation.cisco.WildcardAddressSpecifier;
 import org.batfish.representation.juniper.AsPathMatchExprParser;
 import org.batfish.representation.juniper.CommunityMember;
 import org.batfish.representation.juniper.JuniperConfiguration;
@@ -91,7 +103,6 @@ import org.batfish.representation.juniper.Route4FilterLineUpTo;
 import org.batfish.representation.juniper.RouteFilter;
 import org.batfish.representation.juniper.RouteFilterLine;
 
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -114,7 +125,7 @@ public final class Convert {
         if (communityList != null) {
             for (StandardCommunityListLine communityListLine : communityList.getLines()) {
                 if (communityListLine.getAction() != LineAction.PERMIT) {
-                    throw new IllegalArgumentException("DENY in community list " + communityList.getName() + " is not supported");
+                    throw new IllegalArgumentException("DENY in community list " + listName + " is not supported");
                 }
                 for (StandardCommunity community : communityListLine.getCommunities()) {
                     communities.add(community.toString());
@@ -129,9 +140,14 @@ public final class Convert {
         } else {
             for (ExpandedCommunityListLine communityListLine : expandedCommunityList.getLines()) {
                 if (communityListLine.getAction() != LineAction.PERMIT) {
-                    throw new IllegalArgumentException("DENY in community list " + communityList.getName() + " is not supported");
+                    throw new IllegalArgumentException("DENY in community list " + listName + " is not supported");
                 }
-                communities.add(communityListLine.getRegex());
+                String regex = communityListLine.getRegex();
+                if (regex.startsWith("_") && regex.endsWith(":")) {
+                    communities.add(regex.substring(1) + ".*");
+                } else {
+                    communities.add(CiscoConversions.toJavaRegex(regex));
+                }
             }
             Set<String> return_2 = new HashSet<>();
             return_2.add("expanded");
@@ -140,6 +156,32 @@ public final class Convert {
             return_list.add(return_2);
             return return_list;
         }
+    }
+
+    private static PrefixRange convertIPSpace(IpSpace ipSpace) {
+        if (ipSpace instanceof IpIpSpace space) {
+            return PrefixRange.fromPrefix(space.getIp().toPrefix());
+        } else if (ipSpace instanceof PrefixIpSpace space) {
+            return PrefixRange.fromPrefix(space.getPrefix());
+        } else if (ipSpace instanceof IpWildcardIpSpace space) {
+            return PrefixRange.fromPrefix(space.getIpWildcard().toPrefix());
+        } else {
+            throw new IllegalArgumentException("IP space " + ipSpace + " is not supported");
+        }
+    }
+
+    private static PrefixRange convertAclLine(ExtendedAccessListLine line) {
+        IpWildcard srcIpWildcard = ((WildcardAddressSpecifier) line.getSourceAddressSpecifier()).getIpWildcard();
+        Ip ip = srcIpWildcard.getIp();
+        IpWildcard dstIpWildcard = ((WildcardAddressSpecifier) line.getDestinationAddressSpecifier()).getIpWildcard();
+        long minSubnet = dstIpWildcard.getIp().asLong();
+        long maxSubnet = minSubnet | dstIpWildcard.getWildcardMask();
+        int minPrefixLength = dstIpWildcard.getIp().numSubnetBits();
+        int maxPrefixLength = Ip.create(maxSubnet).numSubnetBits();
+        int statedPrefixLength = srcIpWildcard.getWildcardMaskAsIp().inverted().numSubnetBits();
+        int prefixLength = Math.min(statedPrefixLength, minPrefixLength);
+        Prefix prefix = Prefix.create(ip, prefixLength);
+        return new PrefixRange(prefix, new SubRange(minPrefixLength, maxPrefixLength));
     }
 
     public static Match convertCiscoMatch(CiscoConfiguration config, RouteMapMatchLine matchLine) {
@@ -173,36 +215,64 @@ public final class Convert {
                 }
             }
             return new MatchPrefix(prefixRanges);
+        } else if (matchLine instanceof RouteMapMatchIpAccessListLine line) {
+            Set<PrefixRange> prefixRanges = new HashSet<>();
+            for (String listName : line.getListNames()) {
+                var stdAcl = config.getStandardAcls().get(listName);
+                if (stdAcl != null) {
+                    for (StandardAccessListLine aclLine : stdAcl.getLines()) {
+                        if (aclLine.getAction() != LineAction.PERMIT) {
+                            throw new IllegalArgumentException("DENY in ACL " + listName + " is not supported");
+                        }
+                        prefixRanges.add(convertAclLine(aclLine.toExtendedAccessListLine()));
+                    }
+                    continue;
+                }
+                var extAcl = config.getExtendedAcls().get(listName);
+                if (extAcl != null) {
+                    for (ExtendedAccessListLine aclLine : extAcl.getLines()) {
+                        if (aclLine.getAction() != LineAction.PERMIT) {
+                            throw new IllegalArgumentException("DENY in extended ACL " + listName + " is not supported");
+                        }
+                        prefixRanges.add(convertAclLine(aclLine));
+                    }
+                    continue;
+                }
+                throw new IllegalArgumentException("can't find ACL " + listName);
+            }
+            return new MatchPrefix(prefixRanges);
         } else {
             throw new IllegalArgumentException("unsupported Cisco match line " + matchLine.getClass());
         }
     }
 
-    public static Setter convertCiscoSetter(CiscoConfiguration config, RouteMapSetLine setLine) {
+    public static void convertCiscoSetter(CiscoConfiguration config, RouteMapSetLine setLine, List<Setter> setterList) {
         if (setLine instanceof RouteMapSetCommunityLine line) {
             Set<String> tags = line.getCommunities()
                     .stream().map(tag -> StandardCommunity.of(tag).toString()).collect(Collectors.toSet());
             List<CommunityList> retList = new ArrayList<>();
             retList.add(new NormalCommunityList(tags));
-            return new SetCommunity(retList);
+            setterList.add(new SetCommunity(retList));
         } else if (setLine instanceof RouteMapSetAdditiveCommunityLine line) {
             Set<String> tags = line.getCommunities()
                     .stream().map(StandardCommunity::toString).collect(Collectors.toSet());
             List<CommunityList> retList = new ArrayList<>();
             retList.add(new NormalCommunityList(tags));
-            return new AddCommunity(retList);
+            setterList.add(new AddCommunity(retList));
         } else if (setLine instanceof RouteMapSetDeleteCommunityLine line) {
             Set<String> tags = convertCiscoCommunityList(config, line.getListName()).get(0);
             List<CommunityList> retList = new ArrayList<>();
             retList.add(new NormalCommunityList(tags));
-            return new DeleteCommunity(retList);
+            setterList.add(new DeleteCommunity(retList));
         } else if (setLine instanceof RouteMapSetLocalPreferenceLine line) {
             LongExpr expr = line.getLocalPreference();
             if (expr instanceof LiteralLong literal) {
-                return new SetLocalPreference(literal.getValue());
+                setterList.add(new SetLocalPreference(literal.getValue()));
             } else {
                 throw new IllegalArgumentException("non-literal local preference " + expr.getClass() + " is not supported");
             }
+        } else if (setLine instanceof RouteMapSetMetricLine line) {
+            warn("set metric will be ignored");
         } else {
             throw new IllegalArgumentException("unsupported Cisco set line " + setLine.getClass());
         }
@@ -213,10 +283,8 @@ public final class Convert {
                 .stream()
                 .map(line -> convertCiscoMatch(config, line))
                 .toList();
-        List<Setter> setterList = clause.getSetList()
-                .stream()
-                .map(line -> convertCiscoSetter(config, line))
-                .toList();
+        List<Setter> setterList = new ArrayList<>();
+        clause.getSetList().forEach(line -> convertCiscoSetter(config, line, setterList));
         boolean permit = clause.getAction() == LineAction.PERMIT;
         Action action;
         if(permit){
@@ -368,33 +436,28 @@ public final class Convert {
         return matchList;
     }
 
-    @Nullable public static Setter convertJuniperSetter(JuniperConfiguration config, PsThen psThen) {
+    public static void convertJuniperSetter(JuniperConfiguration config, PsThen psThen, List<Setter> setterList) {
         if (psThen instanceof PsThenCommunityAdd then) {
             List<CommunityList> communities = convertJuniperCommunity(config, then.getName());
-            return new AddCommunity(communities);
+            setterList.add(new AddCommunity(communities));
         } else if (psThen instanceof PsThenCommunitySet then) {
             List<CommunityList> communities = convertJuniperCommunity(config, then.getName());
-            return new SetCommunity(communities);
+            setterList.add(new SetCommunity(communities));
         } else if (psThen instanceof PsThenCommunityDelete then) {
             List<CommunityList> communities = convertJuniperCommunity(config, then.getName());
-            return new DeleteCommunity(communities);
+            setterList.add(new DeleteCommunity(communities));
         } else if (psThen instanceof PsThenLocalPreference then) {
-            return new SetLocalPreference(then.getLocalPreference());
+            setterList.add(new SetLocalPreference(then.getLocalPreference()));
         } else if (psThen instanceof PsThenNextHopIp then) {
-            warn("then next-hop ip is not supported and will be ignored");
-            return null;
+            warn("then next-hop ip will be ignored");
         } else if (psThen instanceof PsThenNextHopSelf then) {
-            warn("then next-hop self is not supported and will be ignored");
-            return null;
+            warn("then next-hop self will be ignored");
         } else if (psThen instanceof PsThenNextHopDiscard then) {
-            warn("then next-hop discard is not supported and will be ignored");
-            return null;
+            warn("then next-hop discard will be ignored");
         } else if (psThen instanceof PsThenAsPathPrepend then) {
-            warn("then as-path-prepend is not supported and will be ignored");
-            return null;
+            warn("then as-path-prepend will be ignored");
         } else if (psThen instanceof PsThenMetric then) {
-            warn("then metric is not supported and will be ignored");
-            return null;
+            warn("then metric will be ignored");
         } else {
             throw new IllegalArgumentException("unsupported Juniper then " + psThen.getClass());
         }
@@ -415,10 +478,7 @@ public final class Convert {
                 action = new NextPolicyAction();
                 break;
             } else{
-                Setter setter = convertJuniperSetter(config, then);
-                if (setter != null) {
-                    setterList.add(setter);
-                }
+                convertJuniperSetter(config, then, setterList);
             }
         }
         return new Clause(matchList, setterList, action);

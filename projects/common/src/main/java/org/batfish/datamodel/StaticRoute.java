@@ -1,5 +1,6 @@
 package org.batfish.datamodel;
 
+import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Comparator.comparing;
 import static java.util.Comparator.nullsFirst;
@@ -41,6 +42,8 @@ public final class StaticRoute extends AbstractRoute implements Comparable<Stati
 
   static final long DEFAULT_STATIC_ROUTE_METRIC = 0L;
   private static final String PROP_NEXT_VRF = "nextVrf";
+  private static final String PROP_NON_FORWARDING = "nonForwarding";
+  private static final String PROP_RECURSIVE = "recursive";
   private static final String PROP_TRACK = "track";
 
   // Stored as unsigned 32-bit int for memory savings. Use getMetric() to read.
@@ -59,7 +62,9 @@ public final class StaticRoute extends AbstractRoute implements Comparable<Stati
       @JsonProperty(PROP_ADMINISTRATIVE_COST) long administrativeCost,
       @JsonProperty(PROP_METRIC) long metric,
       @JsonProperty(PROP_TAG) long tag,
-      @JsonProperty(PROP_TRACK) @Nullable String track) {
+      @JsonProperty(PROP_TRACK) @Nullable String track,
+      @JsonProperty(PROP_NON_FORWARDING) @Nullable Boolean nonForwarding,
+      @JsonProperty(PROP_RECURSIVE) @Nullable Boolean recursive) {
     return CACHE.get(
         new StaticRoute(
             requireNonNull(network),
@@ -69,9 +74,9 @@ public final class StaticRoute extends AbstractRoute implements Comparable<Stati
             administrativeCost,
             metric,
             tag,
+            firstNonNull(nonForwarding, false),
             false,
-            false,
-            true,
+            firstNonNull(recursive, true),
             track));
   }
 
@@ -110,9 +115,15 @@ public final class StaticRoute extends AbstractRoute implements Comparable<Stati
     return RoutingProtocol.STATIC;
   }
 
-  @JsonIgnore
+  @JsonProperty(PROP_RECURSIVE)
   public boolean getRecursive() {
     return _recursive;
+  }
+
+  /** Jackson use only */
+  @JsonProperty(PROP_NON_FORWARDING)
+  private boolean getJsonNonForwarding() {
+    return getNonForwarding();
   }
 
   @JsonProperty(PROP_TRACK)

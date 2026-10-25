@@ -4,6 +4,8 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.sameInstance;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import com.google.common.testing.EqualsTester;
 import org.apache.commons.lang3.SerializationUtils;
@@ -143,6 +145,22 @@ public final class StaticRouteTest {
             .build();
 
     assertThat(BatfishObjectMapper.clone(sr, StaticRoute.class), sameInstance(sr));
+  }
+
+  @Test
+  public void checkJsonSerializationOfFlags() {
+    StaticRoute sr =
+        StaticRoute.testBuilder()
+            .setNetwork(Prefix.parse("10.0.0.0/24"))
+            .setNextHop(NextHopIp.of(Ip.parse("10.1.1.1")))
+            .setNonForwarding(true)
+            .setRecursive(false)
+            .build();
+    StaticRoute clone = BatfishObjectMapper.clone(sr, StaticRoute.class);
+
+    assertThat(clone, sameInstance(sr));
+    assertFalse(clone.getRecursive());
+    assertTrue(clone.getNonForwarding());
   }
 
   @Test

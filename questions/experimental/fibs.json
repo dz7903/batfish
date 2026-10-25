@@ -1,0 +1,33 @@
+{
+    "class": "org.batfish.question.fibs.FibsQuestion",
+    "differential": false,
+    "instance": {
+        "description": "Returns the forwarding table (FIB) entries of the converged data plane.",
+        "instanceName": "fibs",
+        "longDescription": "Lists, for each node and VRF, every FIB entry: the main-RIB route it comes from and the forwarding action (forward out an interface to an ARP IP, discard, or look up in another VRF).",
+        "tags": [
+            "dataplane",
+            "routing"
+        ],
+        "variables": {
+            "nodes": {
+                "description": "Examine FIBs on nodes matching this specifier",
+                "type": "nodeSpec",
+                "value": ".*",
+                "displayName": "Nodes"
+            },
+            "vrfs": {
+                "description": "Examine FIBs of VRFs matching this name or regex",
+                "type": "vrf",
+                "value": ".*",
+                "displayName": "VRFs"
+            }
+        },
+        "orderedVariableNames": [
+            "nodes",
+            "vrfs"
+        ]
+    },
+    "nodes": "${nodes}",
+    "vrfs": "${vrfs}"
+}
